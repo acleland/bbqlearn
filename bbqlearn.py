@@ -133,6 +133,15 @@ def testBox():
 
 # --------------------------------------------------------------------------------
 
+class State:
+    def __init__(lalala, x, y, w, h):
+        lalala.box = Box(x, y, w, h)
+
+def stateTest():
+    state = Box(0,0,3,4)
+    print(state.box) 
+
+# --------------------------------------------------------------------------------
 def epsilon_choose(num_choices, index_of_best_choice, epsilon):
     """Returns index_of_best_choice with probability 1-epsilon), 
     otherwise returns an index in range 0 to num_choices-1 with a uniform random probability"""
