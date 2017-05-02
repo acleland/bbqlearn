@@ -1,6 +1,16 @@
 import numpy as np 
 import matplotlib.pyplot as plt
-import pickle
+import tensorflow as tf
+from tensorflow_vgg import vgg16
+from tensorflow_vgg import utils
+import skimage
+import skimage.io
+import glob
+import re 
+import time
+
+TRAIN_PATH = "../Data/Train/"
+OUTPUT_PATH = "../Output/"
 
 # Parameters
 NumEpochs = 1000
@@ -15,18 +25,6 @@ printing = False
 
 
 
-# Actions
-def left(p):
-    return p + np.array([-step_size, 0])
-def right(p):
-    return p + np.array([step_size, 0])
-def up(p):
-    return p + np.array([0, step_size])
-def down(p):
-    return p + np.array([0, -step_size])
-def stop(p):
-    return p
-actions = [left, right, up, down]
 
 # Distance Functions
 def sqdist(p1, p2):
@@ -42,22 +40,11 @@ def sse(coords, ground_truth_coords):
 def sigmoid(z):
     return 1/(1+np.exp(-z))
 
-
-# Code for creating shifted points
-def get_data(ground_truth_coords, num_shifts_per_coord=5, delta_range=5):
-    """returns data as np-array of ground-truth-coord, shifted-coord pairs"""
-    # data[i,0] = ground truth coord of point i. data[i, 1] = shifted coord of point i.
-    data = []
-    for coord in ground_truth_coords:
-        for _ in range(num_shifts_per_coord):
-            data.append([coord, coord + np.random.rand(2)*2*delta_range - delta_range])
-    return np.asarray(data)
-
 # --------------------------------------------------------------------------------
 
-class Q_Perceptron:
+class Perceptron:
     def __init__(self, num_actions, input_vector_length, learning_rate):
-        self.weights = np.random.rand(num_actions, input_vector_length)
+        self.weights = np.random.rand(num_actions, input_vector_length)*2 - 1
         self.learning_rate = learning_rate
     def getQ(self, input_vector, action_index):
         return sigmoid(np.dot(self.weights[action_index], input_vector))
@@ -73,7 +60,7 @@ class Q_Perceptron:
 def testPerceptron():
     x = np.array([3.0,4.0])
     shifted_x = np.array([0.0,0.0])
-    perceptron = Q_Perceptron(len(actions), 2, .5)
+    perceptron = Perceptron(len(actions), 2, .5)
     print("ground_truth: ", x)
     print("shifted_x: ", shifted_x)
     print("initial weights: \n", perceptron.weights)
@@ -84,26 +71,72 @@ def testPerceptron():
         new_state = action(shifted_x)
         print("new state: ", new_state)
 
+def testPerceptron2():
+    img = skimage.io.imread("pdw1.jpg")
+    img = img / 255.0
+    ground_truth = Box(1605, 346, 22, 126)
+    shifted = Box(1630, 446, 22, 126)
+    state = State(img, shifted)
+    print("bounding box:", state.box)
+    features = state.get_features()
+    print("features:", features)
+    print("features shape:", features.shape)
+    perceptron = Perceptron(len(state.actions), len(features), 0.5)
+    qvec = perceptron.getQvector(features)
+    state.left()
+    features2 = state.get_features()
+    qvec2 = perceptron.getQvector(features2)
+    print("Q(s)", qvec)
+    print("Q(s')", qvec2)
+
+
+
+
 # --------------------------------------------------------------------------------
 
 class Box:
     def __init__(self, x, y, width, height):
-        self.vector = np.array([x,y,x+width-1, y+height-1])
+        #self.vector = np.array([x,y,x+width-1, y+height-1])
+        self.x = x
+        self.y = y
         self.width = width
         self.height = height
+    @staticmethod
+    def fromCenter(center_x, center_y, width, height):
+        return Box(int(np.round(center_x - width/2)), int(np.round(center_y-height/2)), width, height)
+
     def area(self):
         return self.width*self.height
-    def center(self):
-        return self.vector[:2] + (self.vector[2:]+1)/2
+    def get_intersection(self, other):
+        max_topleft_x = max(self.x, other.x)
+        max_topleft_y = max(self.y, other.y)
+        min_bottomright_x = min(self.x + self.width, other.x + other.width)
+        min_bottomright_y = min(self.y + self.height, other.y + other.height)
+        width = min_bottomright_x - max_topleft_x
+        height = min_bottomright_y - max_topleft_y
+        if (width < 0 or height < 0): 
+            return None 
+        return Box(max_topleft_x, max_topleft_y, width, height)
     def iou(self, other):
-        max_topleft_x = max(self.vector[0], other.vector[0])
-        max_topleft_y = max(self.vector[1], other.vector[1])
-        min_bottomright_x = min(self.vector[2], other.vector[2])
-        min_bottomright_y = min(self.vector[3], other.vector[3])
-        intersection_area = max(0, (min_bottomright_x - max_topleft_x + 1)*(min_bottomright_y - max_topleft_y + 1))
-        return intersection_area/(self.area() + other.area() - intersection_area)
+        intersection = self.get_intersection(other)
+        if (intersection is not None):
+            return intersection.area()/(self.area() + other.area() - intersection.area())
+        return 0.0
+    def center(self):
+        return self.x+self.width/2, self.y+self.height/2
+    def adjust_width(self, factor):
+        center_x, center_y = self.center()
+        return Box.fromCenter(center_x,center_y, self.width*factor, self.height)
+    def adjust_height(self, factor):
+        center_x, center_y = self.center()
+        return Box.fromCenter(center_x,center_y, self.width, self.height*factor)
+    def zoom(self,factor):
+        center_x, center_y = self.center()
+        return Box.fromCenter(center_x,center_y, self.width*factor, self.height*factor)
+
+
     def __str__(self):
-        return str(self.vector)
+        return str((self.x, self.y, self.width, self.height))
 
 def testBox():
     box1 = Box(0,0,6,5)
@@ -115,17 +148,17 @@ def testBox():
     box7 = Box(7,0,1,1)
     box8 = Box(-1,-1,1,1)
     print("box1:", box1)
-    print("box2: ", box2.vector)
-    print("box3: ", box3.vector)
-    print("box4: ", box4.vector)
-    print("box5: ", box5.vector)
-    print("box6: ", box6.vector)
-    print("box7: ", box7.vector)
-    print("box8: ", box8.vector)
+    print("box2: ", box2)
+    print("box3: ", box3)
+    print("box4: ", box4)
+    print("box5: ", box5)
+    print("box6: ", box6)
+    print("box7: ", box7)
+    print("box8: ", box8)
     print("IOU(1,2) = 0.2: ", box1.iou(box2))
     print("IOU(1,3) = 0.0: ", box1.iou(box3))
     print("IOU(2,3) = 0.04: ", box2.iou(box3))
-    print("IOU(1,4) = 0.33: ", box1.iou(box4))
+    print("IOU(1,4) = 0.033: ", box1.iou(box4))
     print("IOU(1,5) = 0.0: ", box5.iou(box1))
     print("IOU(1,6) = 0.0: ", box1.iou(box6))
     print("IOU(1,7) = 0.0: ", box1.iou(box7))  
@@ -133,13 +166,123 @@ def testBox():
 
 # --------------------------------------------------------------------------------
 
-class State:
-    def __init__(lalala, x, y, w, h):
-        lalala.box = Box(x, y, w, h)
+def get_crop(image, x, y, width, height):
+    return image[x:x+width, y:y+height,:]
 
-def stateTest():
-    state = Box(0,0,3,4)
-    print(state.box) 
+def get_crop_box(image, box):
+    return get_crop(image, box.x, box.y, box.width, box.height)
+
+def make_square_with_centered_margins(img):
+    # Find longer, shorter sides, return img if sides are equal
+    if (img.shape[0] < img.shape[1]):
+        short_side = 0
+        long_side = 1
+        # Need to add diff=longer-shorter to shorter side
+        diff = img.shape[long_side]-img.shape[short_side]
+        # Add floor(diff/2) to "bottom", (diff - floor(diff/2)) to "top"
+        append_margin = np.floor_divide(diff,2)
+        prepend_margin = diff - append_margin
+        append_zeros = np.zeros((append_margin, img.shape[long_side], img.shape[2]))
+        prepend_zeros = np.zeros((prepend_margin, img.shape[long_side], img.shape[2]))
+        new_image = np.concatenate((img,append_zeros), axis=0)
+        new_image = np.concatenate((prepend_zeros, new_image), axis=0)
+        return new_image
+    elif (img.shape[1] < img.shape[0]):
+        short_side = 1
+        long_side = 0
+        # Need to add diff=longer-shorter to shorter side
+        diff = img.shape[long_side]-img.shape[short_side]
+        # Add floor(diff/2) to "bottom", (diff - floor(diff/2)) to "top"
+        append_margin = np.floor_divide(diff,2)
+        prepend_margin = diff - append_margin
+        append_zeros = np.zeros((img.shape[long_side], append_margin, img.shape[2]))
+        prepend_zeros = np.zeros((img.shape[long_side], prepend_margin, img.shape[2]))
+        new_image = np.concatenate((img,append_zeros), axis=1)
+        new_image = np.concatenate((prepend_zeros, new_image), axis=1)
+        return new_image
+    else:
+        return img  # the image is already square
+
+def test_my_square():
+    filenames = get_filenames()
+    img, bb, gt = parse_training_label(filenames[0])
+
+
+# --------------------------------------------------------------------------------
+
+class VggHandler:
+    def __init__(self):
+        self.vgg = vgg16.Vgg16()
+        self.image_holder = tf.placeholder("float", [1, 224, 224, 3])
+        self.vgg.build(self.image_holder)
+
+    def get_fc6(self, image):
+        vgg = self.vgg
+        image = skimage.transform.resize(image, (224, 224), mode='constant')
+        image = image.reshape((1,224,224,3))
+        with tf.Session() as sess:
+            feed_dict = {self.image_holder: image}
+            fc6 = sess.run(vgg.fc6, feed_dict=feed_dict)
+        return fc6.reshape(fc6.shape[1])
+
+class State:
+    def __init__(self, vgg_handler, image, box, dx=10, zoom_frac=0.1):
+        self.box = box
+        self.image = image
+        self.vgg = vgg_handler
+        self.actions = [self.left, self.right, self.up, self.down, self.bigger, self.smaller, self.fatter, self.taller, self.stop]
+        self.dx = dx
+        self.zoom_frac = zoom_frac
+        self.done = False
+        # 4096 features + history features
+
+    @staticmethod
+    def fromCoords(vgg_handler, image, x, y, w, h, dx=10, zoom_frac=0.1):
+        return State(vgg_handler, image, Box(x,y,w,h), dx, zoom_frac)
+
+    @staticmethod
+    def fromFile(vgg_handler, image_filename, box, dx=10, zoom_frac=0.1):
+        image = skimage.io.imread('image_filename')/255.0
+        return State(vgg_handler, image, box, dx, zoom_frac)
+
+    def get_features(self):
+        crop = get_crop(self.image, self.box.x, self.box.y, self.box.width, self.box.height)
+        return self.vgg.get_fc6(crop)
+
+    # Actions:
+    def left(self):
+        self.box.x -= self.dx
+    def right(self):
+        self.box.x += self.dx
+    def up(self):
+        self.box.y -= self.dy 
+    def down(self):
+        self.box.y += self.dy
+    def bigger(self):
+        self.box = self.box.zoom(1.0+zoom_frac)
+    def smaller(self):
+        self.box = self.box.zoom(1.0-zoom_frac)
+    def fatter(self):
+        self.box = self.box.adjust_width(1+zoom_frac)
+    def taller(self):
+        self.box = self.box.adjust_height(1+zoom_frac)
+    def stop(self):
+        self.done = True
+
+    def take_action(action_number):
+        self.actions[action_number]
+
+def testState():
+    img = skimage.io.imread("pdw1.jpg")
+    img = img / 255.0
+    vgg_handler = VggHandler()
+    state = State.fromCoords(vgg_handler, img, 1605, 346, 222, 126)
+    print("bounding box:",state.box)
+    features = state.get_features()
+    print("features:",features)
+    print("features shape:", features.shape)
+
+
 
 # --------------------------------------------------------------------------------
 def epsilon_choose(num_choices, index_of_best_choice, epsilon):
@@ -161,9 +304,82 @@ def epsilon_choose_test(epsilon):
 
 # --------------------------------------------------------------------------------
 
+def get_filenames():
+    fnames = []
+    for labelFile in glob.glob(TRAIN_PATH + '*.labl'):
+        labelName = re.search('Train/(.+)\.labl', labelFile).group(1)
+        fnames.append(labelName)
+    return fnames
+
+def parse_training_label(filename):
+    with open(TRAIN_PATH + filename + '.labl', 'r') as f:
+        label = f.read()
+    label = [int(i) for i in label.split('|')]
+    bounding_box = Box(label[1], label[0], label[3], label[2])
+    ground_truth = Box(label[5], label[4], label[7], label[6])
+    image_filename = re.search('(pdw[0-9])(.+)', filename).group(1)
+    image_filename += '.jpg'
+    return image_filename, bounding_box, ground_truth
+
+def get_from_file(filename):
+    with open(TRAIN_PATH + filename + '.labl', 'r') as f:
+        label = f.read()
+    label = [int(i) for i in label.split('|')]
+    image_filename = re.search('(pdw[0-9])(.+)', filename).group(1)
+    image_filename += '.jpg'
+    return image_filename, label
+
+
+def get_from_fnames(fnames):
+    image_files = []
+    labels = []
+    label_filenames = fnames
+    for label_file in label_filenames:
+        image_filename, label = get_from_file(label_file)
+        image_filename = TRAIN_PATH + image_filename
+        image_files.append(image_filename)
+        labels.append(label)
+    return image_files, labels
+
+def read_from_queue(input_queue):
+    label = input_queue[1]
+    #image_reader = tf.WholeFileReader()
+    #_, image_file = image_reader.read(input_queue[0])
+    image_file = tf.read_file(input_queue[0])
+    image = tf.image.decode_jpeg(image_file, channels=3)
+    image = tf.image.resize_images(image, [224,224])
+    return image, label
+
+def get_train_data():
+    label_filenames = get_filenames()
+    return ([parse_training_label(filename) for filename in label_filenames])
+
+def save_training_features(filename):
+    train_data = get_train_data()
+    vgg_handler = VggHandler()
+    #print(train_data)
+    features = []
+    count = 1
+    for img_name, bb, gt in train_data[:10]:
+        print(count)
+        img = skimage.io.imread(TRAIN_PATH + img_name)/255.0
+        t = time.time()
+        state = State(vgg_handler, img, bb)
+        features.append(state.get_features())
+        print("time:", time.time() - t)
+        count +=1
+    np.save(filename, features)
+
+
+# --------------------------------------------------------------------------------
+
 # Q-learning algorithm
+
 def qlearn(training_data, NumEpochs, printing=True):
-    perceptron = Q_Perceptron(num_actions=4, input_vector_length=2, learning_rate=0.2) 
+    pass
+
+def qlearn_old(training_data, NumEpochs, printing=True):
+    perceptron = Perceptron(num_actions=4, input_vector_length=2, learning_rate=0.2) 
     states = np.copy(training_data[:,1])
 
     ground_truths = training_data[:,0]
@@ -173,6 +389,10 @@ def qlearn(training_data, NumEpochs, printing=True):
     for epoch_number in range(NumEpochs):
         print("Epoch: ", epoch_number+1, "of", NumEpochs)
         for example_num in range(len(training_data)):
+            # load example image from file 
+            # initialize ground truth from label
+            # initialize state from image label
+
             example = training_data[example_num]
             s = states[example_num]
             s_prime = s
@@ -255,6 +475,11 @@ def plot_Q(fignum, weights, action_index, var_index):
     plt.figure(fignum)
     plt.plot(x, Q, 'b-')
 
+def show_image(img, fig=0):
+    plt.figure(fig)
+    plt.imshow(img)
+    plt.show()
+
 
 # --------------------------------------------------------------------------------
 
@@ -272,8 +497,15 @@ def run_and_plot():
 
 # --------------------------------------------------------------------------------
 
-#run_and_plot()
 
-#testPerceptron()
-#epsilon_choose_test(.7)
-testBox()
+
+# --------------------------------------------------------------------------------
+
+if __name__ == '__main__':
+#run_and_plot()
+    #testBox()
+    #testPerceptron2()
+    #epsilon_choose_test(.7)
+    #testState()
+    save_training_features('first10features_warp')
+    
