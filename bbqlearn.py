@@ -5,9 +5,11 @@ from tensorflow_vgg import vgg16
 from tensorflow_vgg import utils
 import skimage
 import skimage.io
+import matplotlib.image
 import glob
 import re 
 import time
+import pickle
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
@@ -104,7 +106,9 @@ class Box:
     @staticmethod
     def fromCenter(center_x, center_y, width, height):
         return Box(int(np.round(center_x - width/2)), int(np.round(center_y-height/2)), width, height)
-
+    @staticmethod
+    def fromVector(box):
+        return Box(box[1], box[0], box[3], box[2])
     def area(self):
         return self.width*self.height
     def get_intersection(self, other):
@@ -138,39 +142,87 @@ class Box:
     def __str__(self):
         return str((self.x, self.y, self.width, self.height))
 
-def testBox():
-    box1 = Box(0,0,6,5)
-    box2 = Box(3,2,4,6)
-    box3 = Box(4,7,1,2)
-    box4 = Box(1,1,1,1)
-    box5 = Box(1,-1,1,1)
-    box6 = Box(-2,0,1,1)
-    box7 = Box(7,0,1,1)
-    box8 = Box(-1,-1,1,1)
-    print("box1:", box1)
-    print("box2: ", box2)
-    print("box3: ", box3)
-    print("box4: ", box4)
-    print("box5: ", box5)
-    print("box6: ", box6)
-    print("box7: ", box7)
-    print("box8: ", box8)
-    print("IOU(1,2) = 0.2: ", box1.iou(box2))
-    print("IOU(1,3) = 0.0: ", box1.iou(box3))
-    print("IOU(2,3) = 0.04: ", box2.iou(box3))
-    print("IOU(1,4) = 0.033: ", box1.iou(box4))
-    print("IOU(1,5) = 0.0: ", box5.iou(box1))
-    print("IOU(1,6) = 0.0: ", box1.iou(box6))
-    print("IOU(1,7) = 0.0: ", box1.iou(box7))  
-    print("IOU(1,8) = 0.0: ", box1.iou(box8)) 
 
 # --------------------------------------------------------------------------------
 
-def get_crop(image, x, y, width, height):
-    return image[x:x+width, y:y+height,:]
 
-def get_crop_box(image, box):
-    return get_crop(image, box.x, box.y, box.width, box.height)
+def get_crop(image, box):
+    return image[box.x:box.x+box.width, box.y:box.y+box.height]
+
+def read_label(filename):
+    with open(filename) as f:
+        label = f.read()
+    return label
+
+def parse_label(label):
+    label = label.split('|')
+    image_filename = label[0]
+    bb = Box.fromVector([int(x) for x in label[1:5]])
+    gt = Box.fromVector([int(x) for x in label[5:]])
+    return image_filename, bb, gt
+
+def load_image(filepath):
+    return matplotlib.image.imread(filepath)/255.0
+
+def resize(image):
+    return skimage.transform.resize(image, (224, 224), mode='constant')
+
+def get_img_from_label(filename):
+    label = read_label(TRAIN_PATH + filename + '.labl')
+    img_f, bb, gt = parse_label(label)
+    img = load_image(TRAIN_PATH + img_f + '.jpg')
+    return get_crop(img, bb), get_crop(img, gt)
+
+def get_skew_from_label(filename):
+    label = read_label(TRAIN_PATH + filename + '.labl')
+    img_f, bb,  = parse_label(label)
+    img = load_image(TRAIN_PATH + img_f + '.jpg')
+    return get_crop(img, bb), get_crop(img, gt)
+
+def get_train_labels():
+    fnames = []
+    for labelFile in glob.glob(TRAIN_PATH + '*.labl'):
+        labelName = re.search('Train/(.+)\.labl', labelFile).group(1)
+        fnames.append(labelName)
+    return fnames
+
+def save_training_features(filename):
+    start_time = time.time()
+    train_labels = get_train_labels()
+    vgg_handler = VggHandler()
+    #print(train_data)
+    features = {}
+    count = 1
+    for train_label in train_labels:
+        print(count, train_label)
+        img_f, bb, gt = parse_label(read_label(TRAIN_PATH + train_label + '.labl'))
+        img = load_image(TRAIN_PATH + img_f + '.jpg')
+        skew = get_crop(img, bb)
+        t = time.time()
+        features[train_label] = vgg_handler.get_fc6(skew)
+        print("time:", time.time() - t)
+        count +=1
+    print('total time elapsed: ', time.time() - start_time)
+    pickle.dump(features, open(filename, 'wb'))
+
+def save_training_features_test(filename):
+    train_labels = get_train_labels() 
+    vgg_handler = VggHandler()
+    #print(train_data)
+    features = {}
+    count = 1
+    for train_label in train_labels[:10]:
+        print(count, train_label)
+        img_f, bb, gt = parse_label(read_label(TRAIN_PATH + train_label + '.labl'))
+        img = load_image(TRAIN_PATH + img_f + '.jpg')
+        skew = get_crop(img, bb)
+        t = time.time()
+        features[train_label] = vgg_handler.get_fc6(skew)
+        print("time:", time.time() - t)
+        count +=1
+    pickle.dump(features, open(filename, 'wb'))
+
+# --------------------------------------------------------------------------------
 
 def make_square_with_centered_margins(img):
     # Find longer, shorter sides, return img if sides are equal
@@ -203,12 +255,9 @@ def make_square_with_centered_margins(img):
     else:
         return img  # the image is already square
 
-def test_my_square():
-    filenames = get_filenames()
-    img, bb, gt = parse_training_label(filenames[0])
-
-
 # --------------------------------------------------------------------------------
+
+
 
 class VggHandler:
     def __init__(self):
@@ -224,6 +273,15 @@ class VggHandler:
             feed_dict = {self.image_holder: image}
             fc6 = sess.run(vgg.fc6, feed_dict=feed_dict)
         return fc6.reshape(fc6.shape[1])
+
+def testVgg():
+    pdw1 = load_image(TRAIN_PATH + 'pdw1.jpg')
+    img_f, bb, gt = parse_label(read_label(TRAIN_PATH + 'pdw1a.labl'))
+    pdw1a = get_crop(pdw1, bb)
+    vgg = VggHandler()
+    features = vgg.get_fc6(pdw1a)
+    print(features)
+
 
 class State:
     def __init__(self, vgg_handler, image, box, dx=10, zoom_frac=0.1):
@@ -246,7 +304,7 @@ class State:
         return State(vgg_handler, image, box, dx, zoom_frac)
 
     def get_features(self):
-        crop = get_crop(self.image, self.box.x, self.box.y, self.box.width, self.box.height)
+        crop = get_crop(self.image, self.box)
         return self.vgg.get_fc6(crop)
 
     # Actions:
@@ -302,73 +360,7 @@ def epsilon_choose_test(epsilon):
     print(bins)
     print(hist)
 
-# --------------------------------------------------------------------------------
 
-def get_filenames():
-    fnames = []
-    for labelFile in glob.glob(TRAIN_PATH + '*.labl'):
-        labelName = re.search('Train/(.+)\.labl', labelFile).group(1)
-        fnames.append(labelName)
-    return fnames
-
-def parse_training_label(filename):
-    with open(TRAIN_PATH + filename + '.labl', 'r') as f:
-        label = f.read()
-    label = [int(i) for i in label.split('|')]
-    bounding_box = Box(label[1], label[0], label[3], label[2])
-    ground_truth = Box(label[5], label[4], label[7], label[6])
-    image_filename = re.search('(pdw[0-9])(.+)', filename).group(1)
-    image_filename += '.jpg'
-    return image_filename, bounding_box, ground_truth
-
-def get_from_file(filename):
-    with open(TRAIN_PATH + filename + '.labl', 'r') as f:
-        label = f.read()
-    label = [int(i) for i in label.split('|')]
-    image_filename = re.search('(pdw[0-9])(.+)', filename).group(1)
-    image_filename += '.jpg'
-    return image_filename, label
-
-
-def get_from_fnames(fnames):
-    image_files = []
-    labels = []
-    label_filenames = fnames
-    for label_file in label_filenames:
-        image_filename, label = get_from_file(label_file)
-        image_filename = TRAIN_PATH + image_filename
-        image_files.append(image_filename)
-        labels.append(label)
-    return image_files, labels
-
-def read_from_queue(input_queue):
-    label = input_queue[1]
-    #image_reader = tf.WholeFileReader()
-    #_, image_file = image_reader.read(input_queue[0])
-    image_file = tf.read_file(input_queue[0])
-    image = tf.image.decode_jpeg(image_file, channels=3)
-    image = tf.image.resize_images(image, [224,224])
-    return image, label
-
-def get_train_data():
-    label_filenames = get_filenames()
-    return ([parse_training_label(filename) for filename in label_filenames])
-
-def save_training_features(filename):
-    train_data = get_train_data()
-    vgg_handler = VggHandler()
-    #print(train_data)
-    features = []
-    count = 1
-    for img_name, bb, gt in train_data[:10]:
-        print(count)
-        img = skimage.io.imread(TRAIN_PATH + img_name)/255.0
-        t = time.time()
-        state = State(vgg_handler, img, bb)
-        features.append(state.get_features())
-        print("time:", time.time() - t)
-        count +=1
-    np.save(filename, features)
 
 
 # --------------------------------------------------------------------------------
@@ -454,50 +446,6 @@ def qlearn_old(training_data, NumEpochs, printing=True):
 
     return states, perceptron.weights, sses
 
-# --------------------------------------------------------------------------------
-def plot_sse_by_actions(fig_num, sses):
-    plt.figure(1)
-    plt.plot(np.arange(len(sses)), sses, '-b')
-    plt.savefig('sse')
-    
-
-def plot_before_after(fig_num, ground_truths, original_shifts, final_coords):
-    plt.figure(2)
-    plt.plot(ground_truths[:,0], ground_truths[:,1], 'b.', 
-        original_shifts[:,0], original_shifts[:,1], 'r.',
-        final_coords[:,0], final_coords[:,1], 'g.')
-    plt.savefig('before_after')
-    
-
-def plot_Q(fignum, weights, action_index, var_index):
-    x = np.arange(0,1,.01)
-    Q = weights[action_index, var_index]*x
-    plt.figure(fignum)
-    plt.plot(x, Q, 'b-')
-
-def show_image(img, fig=0):
-    plt.figure(fig)
-    plt.imshow(img)
-    plt.show()
-
-
-# --------------------------------------------------------------------------------
-
-def run_and_plot():
-    # Initialize data
-    training_data = pickle.load(open("training_data.p", "rb"))
-    ground_truth_coords = pickle.load(open("ground_truth_coords.p","rb"))
-
-    states, weights, sses = qlearn(training_data, NumEpochs, printing)
-
-    plot_sse_by_actions(1, sses)
-    plot_before_after(2, ground_truth_coords, training_data[:,1], states)
-    plot_Q(3, weights, 0, 0)
-    plt.show()
-
-# --------------------------------------------------------------------------------
-
-
 
 # --------------------------------------------------------------------------------
 
@@ -507,5 +455,5 @@ if __name__ == '__main__':
     #testPerceptron2()
     #epsilon_choose_test(.7)
     #testState()
-    save_training_features('first10features_warp')
+    save_training_features('allfeatures.p')
     
