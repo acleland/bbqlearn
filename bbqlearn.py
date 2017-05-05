@@ -1,4 +1,6 @@
 import numpy as np 
+import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow_vgg import vgg16
@@ -300,7 +302,7 @@ class State:
 
     @staticmethod
     def fromFile(vgg_handler, image_filename, box, dx=10, zoom_frac=0.1):
-        image = skimage.io.imread('image_filename')/255.0
+        image = load_image(image_filename)
         return State(vgg_handler, image, box, dx, zoom_frac)
 
     def get_features(self):
