@@ -73,7 +73,11 @@ def epsilon_choose_test(epsilon):
 # File scripting
 
 def get_crop(image, box):
-    return image[box.x:box.x+box.width, box.y:box.y+box.height]
+    print('\nget_crop() called.')
+    print( 'image shape: ', image.shape)
+    print('box: ', box)
+    print()
+    return image[box.y:box.y+box.height, box.x:box.x+box.width]
 
 def read_label(filename):
     with open(filename) as f:
@@ -284,6 +288,8 @@ class Box:
     def zoom(self,factor):
         center_x, center_y = self.center()
         return Box.fromCenter(center_x,center_y, self.width*factor, self.height*factor)
+    def round(self):
+        return Box.fromVector(np.round(self.toVector()).astype(int))
 
 
     def __str__(self):
@@ -319,21 +325,24 @@ def testVgg():
 # --------------------------------------------------------------------------------
 
 class State:
-    def __init__(self, vgg_handler, train_file, initial_features, history_length):
+    def __init__(self, vgg_handler, train_file, initial_features, history_length, printing=False):
         
         self.train_file = train_file
         self.image_name, self.box, self.gt = parse_label(read_label(TRAIN_PATH + train_file + '.labl'))
-        self.image = load_image(TRAIN_PATH + self.image_filename + '.jpg')
+        self.image = load_image(TRAIN_PATH + self.image_name + '.jpg')
         
         self.vgg = vgg_handler
         self.actions = [self.left, self.right, self.up, self.down, self.bigger, self.smaller, self.fatter, self.taller, self.stop]
         self.num_actions = len(self.actions)
         self.history_length = history_length
         self.history = deque(maxlen=history_length)
+        for _ in range(history_length):
+            self.history.appendleft(np.zeros(self.num_actions))
+        self.readable_history = deque(maxlen=history_length)
         
-        self.vector = np.concatenate((initial_features, np.zeros(self.num_actions * history_length))
-        
-        self.dx = 5
+        self.vector = np.concatenate((initial_features, np.zeros(self.num_actions * history_length)))
+
+        self.shift = 5
         self.zoom_frac = 0.1
         self.done = False
 
@@ -345,42 +354,37 @@ class State:
         return self.vgg.get_fc6(crop)
 
     def update(self):
-        self.vector = np.concatenate((self.get_features(), np.concatenate(self.history)))
+        features = self.get_features()
+        self.vector = np.concatenate((features, np.concatenate(self.history)))
 
-    # Actions:
+    # Actions: (Don't call these explicitly, otherwise, state history  and features 
+    #           won't update correctly. Instead use state.take_action(action_number).)
     def left(self):
-        self.box.x -= self.dx
+        self.box.x -= self.shift
     def right(self):
-        self.box.x += self.dx
+        self.box.x += self.shift
     def up(self):
-        self.box.y -= self.dy 
+        self.box.y -= self.shift 
     def down(self):
-        self.box.y += self.dy
+        self.box.y += self.shift
     def bigger(self):
-        self.box = self.box.zoom(1.0+zoom_frac)
+        self.box = self.box.zoom(1.0+self.zoom_frac)
     def smaller(self):
-        self.box = self.box.zoom(1.0-zoom_frac)
+        self.box = self.box.zoom(1.0-self.zoom_frac)
     def fatter(self):
-        self.box = self.box.adjust_width(1+zoom_frac)
+        self.box = self.box.adjust_width(1+self.zoom_frac)
     def taller(self):
-        self.box = self.box.adjust_height(1+zoom_frac)
+        self.box = self.box.adjust_height(1+self.zoom_frac)
     def stop(self):
         self.done = True
 
-    def take_action(action_number):
-        self.actions[action_number]
+    def take_action(self, action_number):
+        self.actions[action_number]()
+        self.box = self.box.round()
         self.history.appendleft(onehot(action_number, self.num_actions))
+        self.readable_history.appendleft(self.actions[action_number].__name__)
         self.update()
 
-def testState():
-    img = skimage.io.imread("pdw1.jpg")
-    img = img / 255.0
-    vgg_handler = VggHandler()
-    state = State.fromCoords(vgg_handler, img, 1605, 346, 222, 126)
-    print("bounding box:",state.box)
-    features = state.get_features()
-    print("features:",features)
-    print("features shape:", features.shape)
 
 
 
@@ -390,7 +394,7 @@ def testState():
   
 
 def qlearn(NumEpochs, printing=True):
-    perceptron = Perceptron(num_actions=9, input_vector_length=4096, learning_rate=0.2) 
+    perceptron = Perceptron(num_actions=9, input_vector_length=4186, learning_rate=0.2) 
     
     train_list = get_train_labels()
     random.shuffle(train_list)
@@ -414,78 +418,77 @@ def qlearn(NumEpochs, printing=True):
         print("Epoch: ", epoch_number+1, "of", NumEpochs)
         epoch_t_start = time.time()
         for example in train_list:
+            example_num += 1
+            actions_this_episode = 0
+
             # load example image from file 
             # initialize ground truth from label
             # initialize state from image label
 
-            image_f, bb, gt = parse_label(read_label(TRAIN_PATH + example + '.labl'))
-            example_features = initial_features[example]
-            state = State(vgg, image_f, bb, example_features)
+            state = State(vgg, example, initial_features[example], history_length=10)
 
             if printing:
-                print(image_f)
-                print('inital bounding box:', bb)
-                print('ground truth:', gt)
-                print('IOU:', bb.iou(gt))
+                print(state)
                 print()
-
 
             action_number = 0
             while not state.done:
-                
+                episode_step_start = time.time()
                 actions_taken += 1
+                actions_this_episode +=1
 
                 # Select action at random
+                s = state.vector
                 Qs = perceptron.getQvector(s)
                 best_action = np.argmax(Qs)
-                action_index = epsilon_choose(len(actions), best_action, epsilon=0.5) 
-                a = actions[action_index] 
+                action_index = epsilon_choose(state.num_actions, best_action, epsilon=0.5)
+                action_name = state.actions[action_index].__name__
 
                 # Compute Q(s,a)
                 Qsa = perceptron.getQ(s, action_index)
+                iou = state.box.iou(state.gt)
 
                 # Take action to get new state s'
-                s_prime = a(s)
-                d_prime = dist(ground_truth, s_prime)
-                r = np.sign(d - d_prime)  # immediate reward
+                state.take_action(action_index)
+                s_prime = state.vector
+                new_iou = state.box.iou(state.gt)
+                r = np.sign(new_iou - iou)  # immediate reward
 
                 # Compute Q(s',a') for all a' in actions
-                Qs_prime = perceptron.getQvector(s_prime)
+                Qs_prime = perceptron.getQvector(state.vector)
 
                 # Determine output, apply perceptron learning rule
                 y = r
-                if action_number + 1 < NumActionsPerEpisode:
+                if not state.done:
                     y += discount_factor*np.max(Qs_prime)
                 
-                perceptron.update_weights(y, Qsa, s, action_index)
-
-                # Update state
-                states[example_num] = s_prime
-
-                # Compute sum square errors
-                sses.append(sse(states, ground_truths))
-
+                perceptron.update_weights(y, Qsa, state.vector, action_index)
                 
                 if printing:
                     #print("Epoch: ", epoch_number+1, "of", NumEpochs)
-                    print("Action number: ", (action_number + 1) , "of", NumActionsPerEpisode)
-                    print("Actions taken: ", actions_taken)
-                    print("ground truth: ", ground_truth)
+                    print("Example: ", example_num)
+                    print("Action: ", actions_this_episode)
+                    print("Action step time: ", time.time() - episode_step_start)
+                    print("ground truth: ", state.gt)
                     print("s: ",  s)
-                    print("distance: ", d)
-                    print("action: ", a.__name__)
+                    print("iou: ", iou)
+                    print("action: ", action_name)
+                    print("action history: ")
+                    print(state.readable_history)
                     print("Q(s,a) = ", Qsa)
                     print("s' = ", s_prime)
-                    print("new distance: ", d_prime)
+                    print("new iou: ", new_iou)
                     print("immediate reward: ", r)
                     print("total reward y: ", y)
                     print("Q(s', a') for each a' = ")
-                    for i in range(len(actions)):
-                        print("\t", actions[i].__name__, "\t", Qs_prime[i])
+                    for i in range(state.num_actions):
+                        print("\t", state.actions[i].__name__, "\t", Qs_prime[i])
+                    print(perceptron.weights)
                     print()
                 
-
-    return states, perceptron.weights, sses
+        if printing:
+            print('Epoch time: ', time.time() - epoch_t_start)
+    return perceptron.weights
 
 
 # --------------------------------------------------------------------------------
