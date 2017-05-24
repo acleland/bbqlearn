@@ -1,7 +1,8 @@
 import numpy as np 
 import matplotlib
-matplotlib.use("TkAgg")
+#matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import tensorflow as tf
 from tensorflow_vgg import vgg16
 from tensorflow_vgg import utils
@@ -14,22 +15,24 @@ import time
 import pickle
 import random
 from collections import deque
+from scipy.special import expit
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
 
 # Parameters
-NumEpochs = 1000
-NumTrainingExamples = 100
-NumShiftsPerCoord = 5
-ShiftRange = .5
-NumActionsPerEpisode = 10
-step_size = 0.01
-discount_factor = 0.5
-learning_rate = 0.2
-printing = False
+NUM_EPOCHS = 1
+NUM_TRAINING_EXAMPLES = 2
+ACTIONS_PER_EPISODE = 5
+DISCOUNT_FACTOR = 0.5
+LEARNING_RATE = 0.2
 
+NUM_ACTIONS = 9
+HISTORY_LENGTH = 2
+NUM_FEATURES = 4096
+STATE_VECTOR_LENGTH = NUM_FEATURES + NUM_ACTIONS * HISTORY_LENGTH
 
+PRINTING = False
 
 
 # Utility Functions
@@ -45,7 +48,7 @@ def sse(coords, ground_truth_coords):
         sumv += sqdist(coords[i], ground_truth_coords[i])
     return sumv
 def sigmoid(z):
-    return 1/(1+np.exp(-z))
+    return expit(z)
 def onehot(i, n):
     vec = np.zeros(n)
     vec[i] = 1
@@ -68,15 +71,10 @@ def epsilon_choose_test(epsilon):
     print(bins)
     print(hist)
 
-
 # --------------------------------------------------------------------------------
 # File scripting
 
 def get_crop(image, box):
-    print('\nget_crop() called.')
-    print( 'image shape: ', image.shape)
-    print('box: ', box)
-    print()
     return image[box.y:box.y+box.height, box.x:box.x+box.width]
 
 def read_label(filename):
@@ -189,8 +187,11 @@ def make_square_with_centered_margins(img):
 
 class Perceptron:
     def __init__(self, num_actions, input_vector_length, learning_rate):
-        self.weights = np.random.rand(num_actions, input_vector_length)*2 - 1
+        #self.weights = np.random.rand(num_actions, input_vector_length)*2 - 1
+        self.weights = np.random.randn(num_actions, input_vector_length)/np.sqrt(input_vector_length)
         self.learning_rate = learning_rate
+    def __str__(self):
+        return str(self.weights)
     def getQ(self, input_vector, action_index):
         return sigmoid(np.dot(self.weights[action_index], input_vector))
     def getQvector(self, input_vector):
@@ -241,7 +242,7 @@ def testPerceptron2():
 
 class Box:
     def __init__(self, x, y, width, height):
-        #self.vector = np.array([x,y,x+width-1, y+height-1])
+        # self.vector = np.array([x,y,x+width-1, y+height-1])
         self.x = x
         self.y = y
         self.width = width
@@ -325,22 +326,22 @@ def testVgg():
 # --------------------------------------------------------------------------------
 
 class State:
-    def __init__(self, vgg_handler, train_file, initial_features, history_length, printing=False):
+    def __init__(self, train_file, history_length=HISTORY_LENGTH, printing=PRINTING):
         
         self.train_file = train_file
         self.image_name, self.box, self.gt = parse_label(read_label(TRAIN_PATH + train_file + '.labl'))
         self.image = load_image(TRAIN_PATH + self.image_name + '.jpg')
-        
-        self.vgg = vgg_handler
         self.actions = [self.left, self.right, self.up, self.down, self.bigger, self.smaller, self.fatter, self.taller, self.stop]
         self.num_actions = len(self.actions)
+        
         self.history_length = history_length
         self.history = deque(maxlen=history_length)
         for _ in range(history_length):
             self.history.appendleft(np.zeros(self.num_actions))
         self.readable_history = deque(maxlen=history_length)
         
-        self.vector = np.concatenate((initial_features, np.zeros(self.num_actions * history_length)))
+        features = training_features[train_file]
+        self.vector = np.concatenate((features, np.zeros(self.num_actions * history_length)))
 
         self.shift = 5
         self.zoom_frac = 0.1
@@ -351,7 +352,7 @@ class State:
 
     def get_features(self):
         crop = get_crop(self.image, self.box)
-        return self.vgg.get_fc6(crop)
+        return vgg.get_fc6(crop)
 
     def update(self):
         features = self.get_features()
@@ -386,29 +387,141 @@ class State:
         self.update()
 
 
-
-
 # --------------------------------------------------------------------------------
 
 # Q-learning algorithm
-  
 
-def qlearn(NumEpochs, printing=True):
-    perceptron = Perceptron(num_actions=9, input_vector_length=4186, learning_rate=0.2) 
+class Qlearn:
+    def __init__(self, NumEpochs=NUM_EPOCHS, NumTrainingExamples=NUM_TRAINING_EXAMPLES, printing=PRINTING):
+        self.num_epochs = NumEpochs
+        
+        self.perceptron = Perceptron(num_actions=NUM_ACTIONS, input_vector_length=STATE_VECTOR_LENGTH, learning_rate=LEARNING_RATE) 
+        self.train_list = get_train_labels()
+        random.shuffle(self.train_list)
+        self.train_list = self.train_list[:NumTrainingExamples] 
+        self.initial_features = pickle.load(open('../Data/all_features.p', 'rb'))
+
+        self.epoch_number = 1
+        self.episode  = 1
+        self.actions_taken = 0
+        self.total_actions = 0
+
+        self.done = False
+        random.shuffle(self.train_list)
+        self.train_queue = deque(self.train_list)
+
+        example = self.train_queue.pop()
+        self.actions_taken = 0
+        self.state = State(example, HISTORY_LENGTH)
+
+        
+        
+        
+    def __str__(self):
+        s = '\nQlearn Status: \nPerceptron:\n' + str(self.perceptron)
+        s += '\nTrain List: \n' + str(self.train_list)
+        s += '\nDone?: ' + str(self.done)
+        s += '\nTrain Queue: ' + str(self.train_queue)
+        s += '\nCurrent State: \n' + str(self.state)
+        s += '\nEpoch Number: ' + str(self.epoch_number)
+        s += '\nActions Taken This Episode: ' + str(self.actions_taken)
+        s += '\nTotal Actions Taken: ' + str(self.total_actions)
+        return s
+
+    def print(self):
+        print(str(self))
+
+    def new_epoch(self):
+        self.epoch_number += 1
+        random.shuffle(self.train_list)
+        self.train_queue = deque(self.train_list)
+        self.episode = 0
+
+    def new_episode(self):
+        example = self.train_queue.pop()
+        self.actions_taken = 0
+        self.state = State(example, HISTORY_LENGTH)
+        self.episode += 1
+
+
+    def next_action(self):
+        # Select action according to epsilon greedy
+        s = self.state.vector
+        Qs = self.perceptron.getQvector(s)
+        best_action = np.argmax(Qs)
+        action_index = epsilon_choose(self.state.num_actions, best_action, epsilon=0.5)
+        action_name = self.state.actions[action_index].__name__
+
+        # Compute Q(s,a)
+        Qsa = self.perceptron.getQ(s, action_index)
+        iou = self.state.box.iou(self.state.gt)
+
+        # Take action to get new state s'
+        self.state.take_action(action_index)
+        s_prime = self.state.vector
+        new_iou = self.state.box.iou(self.state.gt)
+        r = np.sign(new_iou - iou)  # immediate reward
+        
+
+        # Compute Q(s',a') for all a' in actions
+        Qs_prime = self.perceptron.getQvector(self.state.vector)
+
+        # Determine output, apply perceptron learning rule
+        y = r
+        if not self.state.done:
+            y += DISCOUNT_FACTOR*np.max(Qs_prime)
+        
+        self.perceptron.update_weights(y, Qsa, self.state.vector, action_index)
+
+    def step(self):
+        print('Actions this episode:', self.actions_taken)
+        # If in the middle of an episode, take the next action
+        if self.actions_taken < ACTIONS_PER_EPISODE:
+            self.next_action()
+            self.actions_taken += 1
+        # Otherwise, if the queue is not empty initialize next episode 
+        elif self.train_queue:
+            example = self.train_queue.pop()
+            print(example)
+            self.state = State(example, HISTORY_LENGTH)
+            self.actions_taken = 0
+            self.step()
+        else:
+            print('Train queue empty.')
+
+
+    def run(self, save_name):
+        for epoch_number in range(self.num_epochs):
+            print("Epoch: ", epoch_number+1, "of", self.num_epochs)
+            random.shuffle(self.train_list)
+            for example in self.train_list:
+                print(example)
+                self.state = State(example, HISTORY_LENGTH)
+                for action_number in range(ACTIONS_PER_EPISODE):
+                    print('Action ', action_number+1)
+                    self.next_action()
+        print('Training Complete. Saving to', save_name)
+        pickle.dump(self, open(save_name, 'wb'))
+
+
+                
+
+
+def show_box(image, box):
+    fig, ax = plt.subplots(1)
+    ax.imshow(image)
+    rect = patches.Rectangle((box.x, box.y), box.width, box.height, linewidth=1, edgecolor='r', facecolor='none')
+    ax.add_patch(rect)
+    plt.show()
+
+
+
+def qlearn(NumEpochs=NUM_EPOCHS, printing=PRINTING):
+    perceptron = Perceptron(num_actions=NUM_ACTIONS, input_vector_length=STATE_VECTOR_LENGTH, learning_rate=LEARNING_RATE) 
     
     train_list = get_train_labels()
     random.shuffle(train_list)
     train_list = train_list[:10] # limit to first 10 for testing
-    vgg = VggHandler()
-    
-    if printing:
-        print('Train list loaded, here are the first 10:')
-        print(train_list[:10])
-        print('Getting initial features from file...')
-    initial_features = pickle.load(open('../Data/all_features.p', 'rb'))
-    if printing:
-        print('done.\n')
-
 
     total_actions_taken = 0
     actions_taken = 0
@@ -425,7 +538,7 @@ def qlearn(NumEpochs, printing=True):
             # initialize ground truth from label
             # initialize state from image label
 
-            state = State(vgg, example, initial_features[example], history_length=10)
+            state = State(example, history_length=HISTORY_LENGTH)
 
             if printing:
                 print(state)
@@ -460,7 +573,7 @@ def qlearn(NumEpochs, printing=True):
                 # Determine output, apply perceptron learning rule
                 y = r
                 if not state.done:
-                    y += discount_factor*np.max(Qs_prime)
+                    y += DISCOUNT_FACTOR*np.max(Qs_prime)
                 
                 perceptron.update_weights(y, Qsa, state.vector, action_index)
                 
@@ -493,7 +606,12 @@ def qlearn(NumEpochs, printing=True):
 
 # --------------------------------------------------------------------------------
 
+# Load Initial Training Features and set up VGG Handler
+training_features = pickle.load(open('../Data/all_features.p', 'rb'))
+vgg = VggHandler()
+
+# --------------------------------------------------------------------------------
 if __name__ == '__main__':
-    qlearn(NumEpochs=1, printing=True)
+    Qlearn().run('testrun')
 
     
