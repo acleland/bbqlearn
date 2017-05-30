@@ -22,10 +22,11 @@ OUTPUT_PATH = "../Output/"
 
 # Parameters
 NUM_EPOCHS = 1
-NUM_TRAINING_EXAMPLES = 2
+TRAIN_SET_SIZE = 2
 ACTIONS_PER_EPISODE = 5
 DISCOUNT_FACTOR = 0.5
 LEARNING_RATE = 0.2
+EPSILON = 0.5
 
 NUM_ACTIONS = 9
 HISTORY_LENGTH = 2
@@ -75,7 +76,17 @@ def epsilon_choose_test(epsilon):
 # File scripting
 
 def get_crop(image, box):
-    return image[box.y:box.y+box.height, box.x:box.x+box.width]
+    try:
+        assert(box.x >=0 and box.x+box.width <= image.shape[1] and box.y >= 0 and box.y+box.height <= image.shape[0])
+        return image[box.y:box.y+box.height, box.x:box.x+box.width]
+    except AssertionError:
+        print('get_crop: box out of range. Adjusting box to fit.')
+        image_frame = Box(0,0,image.shape[1],image.shape[0])
+        intersection = box.get_intersection(image_frame)
+        if intersection is None:  # if box is totally off image, return a black box
+            return np.zeros((box.height, box.width, 3))
+        return get_crop(image, intersection)
+
 
 def read_label(filename):
     with open(filename) as f:
@@ -392,64 +403,64 @@ class State:
 # Q-learning algorithm
 
 class Qlearn:
-    def __init__(self, NumEpochs=NUM_EPOCHS, NumTrainingExamples=NUM_TRAINING_EXAMPLES, printing=PRINTING):
+    def __init__(self, NumEpochs=NUM_EPOCHS, TrainSetSize=TRAIN_SET_SIZE, printing=PRINTING):
+        # Save parameters as attributes for reference purposes
         self.num_epochs = NumEpochs
-        
-        self.perceptron = Perceptron(num_actions=NUM_ACTIONS, input_vector_length=STATE_VECTOR_LENGTH, learning_rate=LEARNING_RATE) 
+        self.train_set_size = TrainSetSize
+        self.actions_per_episode = ACTIONS_PER_EPISODE
+        self.discount_factor = DISCOUNT_FACTOR
+        self.learning_rate = LEARNING_RATE
+        self.epsilon = EPSILON
+        self.num_actions = NUM_ACTIONS
+        self.history_length = HISTORY_LENGTH
+        self.state_vector_length = NUM_FEATURES + self.history_length * self.num_actions
+        self.printing = printing
+
+        # Initialize perceptron and training data        
+        self.perceptron = Perceptron(num_actions=self.num_actions, input_vector_length=self.state_vector_length, learning_rate=self.learning_rate) 
         self.train_list = get_train_labels()
         random.shuffle(self.train_list)
-        self.train_list = self.train_list[:NumTrainingExamples] 
+        self.train_list = self.train_list[:self.train_set_size] 
         self.initial_features = pickle.load(open('../Data/all_features.p', 'rb'))
+        self.done = False
 
+        # This stuff is for initializing the q.step() function. (for visualization)
         self.epoch_number = 1
         self.episode  = 1
         self.actions_taken = 0
         self.total_actions = 0
-
-        self.done = False
+        
         random.shuffle(self.train_list)
         self.train_queue = deque(self.train_list)
-
         example = self.train_queue.pop()
         self.actions_taken = 0
-        self.state = State(example, HISTORY_LENGTH)
+        self.state = State(example, self.history_length)
 
-        
-        
         
     def __str__(self):
         s = '\nQlearn Status: \nPerceptron:\n' + str(self.perceptron)
-        s += '\nTrain List: \n' + str(self.train_list)
+        s += '\nTrain List: {:d} items'.format(len(self.train_list)) 
+        s +=  '\n' + str(self.train_list)
         s += '\nDone?: ' + str(self.done)
-        s += '\nTrain Queue: ' + str(self.train_queue)
-        s += '\nCurrent State: \n' + str(self.state)
-        s += '\nEpoch Number: ' + str(self.epoch_number)
-        s += '\nActions Taken This Episode: ' + str(self.actions_taken)
-        s += '\nTotal Actions Taken: ' + str(self.total_actions)
+        s += '\nNum Epochs: {:d}'.format(self.num_epochs)
+        s += '\nActions Per Episode: {:d}'.format(self.actions_per_episode)
+        s += '\nDiscount Factor: {:.2f}'.format(self.discount_factor)
+        s += '\nLearning Rate: {:.2f}'.format(self.learning_rate)
+        s += '\nEpsilon: {:.2f}'.format(self.epsilon)
+        s += '\nNum Actions: {:d}'.format(self.num_actions)
+        s += '\nHistory Length: {:d}'.format(self.history_length)
+        s += '\nState Vector Length: {:d}'.format(self.state_vector_length)
         return s
 
     def print(self):
         print(str(self))
 
-    def new_epoch(self):
-        self.epoch_number += 1
-        random.shuffle(self.train_list)
-        self.train_queue = deque(self.train_list)
-        self.episode = 0
-
-    def new_episode(self):
-        example = self.train_queue.pop()
-        self.actions_taken = 0
-        self.state = State(example, HISTORY_LENGTH)
-        self.episode += 1
-
-
-    def next_action(self):
+    def next_action(self, end_of_episode):
         # Select action according to epsilon greedy
         s = self.state.vector
         Qs = self.perceptron.getQvector(s)
         best_action = np.argmax(Qs)
-        action_index = epsilon_choose(self.state.num_actions, best_action, epsilon=0.5)
+        action_index = epsilon_choose(self.state.num_actions, best_action, epsilon=self.epsilon)
         action_name = self.state.actions[action_index].__name__
 
         # Compute Q(s,a)
@@ -460,7 +471,8 @@ class Qlearn:
         self.state.take_action(action_index)
         s_prime = self.state.vector
         new_iou = self.state.box.iou(self.state.gt)
-        r = np.sign(new_iou - iou)  # immediate reward
+        delta_iou = new_iou - iou
+        r = np.sign(delta_iou)  # immediate reward
         
 
         # Compute Q(s',a') for all a' in actions
@@ -468,25 +480,28 @@ class Qlearn:
 
         # Determine output, apply perceptron learning rule
         y = r
-        if not self.state.done:
-            y += DISCOUNT_FACTOR*np.max(Qs_prime)
+        if not end_of_episode:
+            y += self.discount_factor*np.max(Qs_prime)
         
         self.perceptron.update_weights(y, Qsa, self.state.vector, action_index)
+        return action_name, delta_iou, y
 
     def step(self):
         print('Actions this episode:', self.actions_taken)
         # If in the middle of an episode, take the next action
-        if self.actions_taken < ACTIONS_PER_EPISODE:
-            self.next_action()
+        if self.actions_taken < self.actions_per_episode:
+            action, delta_iou, reward = self.next_action(self.actions_taken+1==self.actions_per_episode)
+            print(action, 'delta iou:', delta_iou, 'reward:', reward)
             self.actions_taken += 1
         # Otherwise, if the queue is not empty initialize next episode 
         elif self.train_queue:
             example = self.train_queue.pop()
             print(example)
-            self.state = State(example, HISTORY_LENGTH)
+            self.state = State(example, self.history_length)
             self.actions_taken = 0
             self.step()
         else:
+            self.done = True
             print('Train queue empty.')
 
 
@@ -494,12 +509,15 @@ class Qlearn:
         for epoch_number in range(self.num_epochs):
             print("Epoch: ", epoch_number+1, "of", self.num_epochs)
             random.shuffle(self.train_list)
-            for example in self.train_list:
-                print(example)
-                self.state = State(example, HISTORY_LENGTH)
-                for action_number in range(ACTIONS_PER_EPISODE):
+            for episode_num in range(len(self.train_list)):
+                example = self.train_list[episode_num]
+                print('Episode', episode_num + 1, 'of', len(self.train_list), example)
+                self.state = State(example, self.history_length)
+                for action_number in range(self.actions_per_episode):
                     print('Action ', action_number+1)
-                    self.next_action()
+                    action, delta_iou, reward = self.next_action(action_number+1 == self.actions_per_episode)
+                    print(action, 'delta iou:', delta_iou, 'reward:', reward)
+        self.done = True
         print('Training Complete. Saving to', save_name)
         pickle.dump(self, open(save_name, 'wb'))
 
