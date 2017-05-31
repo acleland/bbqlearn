@@ -16,6 +16,7 @@ import pickle
 import random
 from collections import deque
 from scipy.special import expit
+import sys
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
@@ -424,6 +425,7 @@ class Qlearn:
         self.initial_features = pickle.load(open('all_features.p', 'rb'))
         self.done = False
 
+
         # This stuff is for initializing the q.step() function. (for visualization)
         self.epoch_number = 1
         self.episode  = 1
@@ -506,6 +508,7 @@ class Qlearn:
 
 
     def run(self, save_name):
+        self.start_time = time.time()
         for epoch_number in range(self.num_epochs):
             print("Epoch: ", epoch_number+1, "of", self.num_epochs)
             random.shuffle(self.train_list)
@@ -518,7 +521,9 @@ class Qlearn:
                     action, delta_iou, reward = self.next_action(action_number+1 == self.actions_per_episode)
                     print(action, 'delta iou:', delta_iou, 'reward:', reward)
         self.done = True
+        self.runtime = time.time() - self.start_time
         print('Training Complete. Saving to', save_name)
+        print('Run time:', self.runtime)
         pickle.dump(self, open(save_name, 'wb'))
 
 
