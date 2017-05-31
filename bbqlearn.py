@@ -420,8 +420,8 @@ class Qlearn:
         # Initialize perceptron and training data        
         self.perceptron = Perceptron(num_actions=self.num_actions, input_vector_length=self.state_vector_length, learning_rate=self.learning_rate) 
         self.train_list = get_train_labels()
-        random.shuffle(self.train_list)
         self.train_list = self.train_list[:self.train_set_size] 
+        random.shuffle(self.train_list)
         self.initial_features = pickle.load(open('all_features.p', 'rb'))
         self.done = False
 
