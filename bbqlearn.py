@@ -421,7 +421,7 @@ class Qlearn:
         self.train_list = get_train_labels()
         random.shuffle(self.train_list)
         self.train_list = self.train_list[:self.train_set_size] 
-        self.initial_features = pickle.load(open('../Data/all_features.p', 'rb'))
+        self.initial_features = pickle.load(open('all_features.p', 'rb'))
         self.done = False
 
         # This stuff is for initializing the q.step() function. (for visualization)
