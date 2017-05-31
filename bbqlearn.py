@@ -625,7 +625,7 @@ def qlearn(NumEpochs=NUM_EPOCHS, printing=PRINTING):
 # --------------------------------------------------------------------------------
 
 # Load Initial Training Features and set up VGG Handler
-training_features = pickle.load(open('../Data/all_features.p', 'rb'))
+training_features = pickle.load(open('all_features.p', 'rb'))
 vgg = VggHandler()
 
 # --------------------------------------------------------------------------------
