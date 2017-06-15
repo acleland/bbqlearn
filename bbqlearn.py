@@ -20,6 +20,7 @@ import sys
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
+SAVE_FILE = "testfile.p"
 
 # Parameters
 NUM_EPOCHS = 1
@@ -33,6 +34,8 @@ NUM_ACTIONS = 9
 HISTORY_LENGTH = 2
 NUM_FEATURES = 4096
 STATE_VECTOR_LENGTH = NUM_FEATURES + NUM_ACTIONS * HISTORY_LENGTH
+SHIFT = 5  # number of pixels box shifts by in each left, right, up, down action
+ZOOM_FRAC = 0.1  # Fraction box zooms by in bigger, smaller, taller, fatter actions
 
 PRINTING = False
 
@@ -55,6 +58,12 @@ def onehot(i, n):
     vec = np.zeros(n)
     vec[i] = 1
     return vec
+
+def random_argmax(vector):
+    v = np.asarray(vector)
+    return np.random.choice(np.flatnonzero(v == v.max()))
+
+
 
 def epsilon_choose(num_choices, index_of_best_choice, epsilon):
     """Returns index_of_best_choice with probability 1-epsilon), 
@@ -125,6 +134,22 @@ def get_train_labels():
         labelName = re.search('Train/(.+)\.labl', labelFile).group(1)
         fnames.append(labelName)
     return fnames
+
+def get_train_validation():
+    labels = get_train_labels()
+    train = []
+    validation = []
+    for label in labels:
+        labelnum = int(re.search('(pdw)([0-9]+)([a-z])',label).group(2))
+        if labelnum <= 390:
+            train.append(label)
+        else:
+            validation.append(label)
+
+    return train, validation
+
+
+
 
 def save_training_features(filename):
     start_time = time.time()
@@ -273,6 +298,9 @@ class Box:
         # returns vector of topleft and bottom-right coordinates of rectangle
         return [self.x, self.y, self.x+self.width, self.y+self.height]
 
+    def copy(self):
+        return Box(self.x, self.y, self.width, self.height)
+
     def area(self):
         return self.width*self.height
     def get_intersection(self, other):
@@ -399,6 +427,70 @@ class State:
         self.update()
 
 
+class State2:
+    def __init__(self, image, box, history_length=HISTORY_LENGTH):
+        
+        self.image = image
+        self.box = box.copy()
+
+        self.actions = [self.left, self.right, self.up, self.down, self.bigger, self.smaller, self.fatter, self.taller, self.stop]
+        self.num_actions = len(self.actions)
+        
+        self.history_length = history_length
+        self.history = deque(maxlen=history_length)
+        for _ in range(history_length):
+            self.history.appendleft(np.zeros(self.num_actions))
+        self.readable_history = deque(maxlen=history_length)
+        
+        features = self.get_features()
+        self.vector = np.concatenate((features, np.zeros(self.num_actions * history_length)))
+
+        self.shift = SHIFT
+        self.zoom_frac = ZOOM_FRAC
+        self.done = False
+
+    def __str__(self):
+        return self.image_name + '\n' + str(self.box)
+
+    def get_features(self):
+        crop = get_crop(self.image, self.box)
+        return vgg.get_fc6(crop)
+
+    def update(self):
+        features = self.get_features()
+        self.vector = np.concatenate((features, np.concatenate(self.history)))
+
+    # Actions: (Don't call these explicitly, otherwise, state history  and features 
+    #           won't update correctly. Instead use state.take_action(action_number).)
+    def left(self):
+        self.box.x -= self.shift
+    def right(self):
+        self.box.x += self.shift
+    def up(self):
+        self.box.y -= self.shift 
+    def down(self):
+        self.box.y += self.shift
+    def bigger(self):
+        self.box = self.box.zoom(1.0+self.zoom_frac)
+    def smaller(self):
+        self.box = self.box.zoom(1.0-self.zoom_frac)
+    def fatter(self):
+        self.box = self.box.adjust_width(1+self.zoom_frac)
+    def taller(self):
+        self.box = self.box.adjust_height(1+self.zoom_frac)
+    def stop(self):
+        self.done = True
+
+    def take_action(self, action_number):
+        self.actions[action_number]()
+        self.box = self.box.round()
+        self.history.appendleft(onehot(action_number, self.num_actions))
+        self.readable_history.appendleft(self.actions[action_number].__name__)
+        self.update()
+
+
+
+
 # --------------------------------------------------------------------------------
 
 # Q-learning algorithm
@@ -419,7 +511,7 @@ class Qlearn:
 
         # Initialize perceptron and training data        
         self.perceptron = Perceptron(num_actions=self.num_actions, input_vector_length=self.state_vector_length, learning_rate=self.learning_rate) 
-        self.train_list = get_train_labels()
+        self.train_list, _ = get_train_validation()
         self.train_list = self.train_list[:self.train_set_size] 
         random.shuffle(self.train_list)
         self.initial_features = pickle.load(open('all_features.p', 'rb'))
@@ -461,7 +553,7 @@ class Qlearn:
         # Select action according to epsilon greedy
         s = self.state.vector
         Qs = self.perceptron.getQvector(s)
-        best_action = np.argmax(Qs)
+        best_action = random_argmax(Qs)
         action_index = epsilon_choose(self.state.num_actions, best_action, epsilon=self.epsilon)
         action_name = self.state.actions[action_index].__name__
 
@@ -528,7 +620,74 @@ class Qlearn:
 
 
                 
+# --------------------------------------------------------------------------------
+# Q Testing (try to improve bounding boxes with trained q perceptron)
 
+class Qtest:
+    def __init__(self, perceptron):
+        self.perceptron = perceptron
+
+    def adjust_box(self, image, box, n=ACTIONS_PER_EPISODE, printing=True):
+        state = State2(image, box)
+        for _ in range(n):
+            self.one_step(state, printing)
+        return state.box
+
+    def one_step(self, state, printing=True):
+        # Side effect alert: this function will modify state by taking a best action according to the q function
+        # Get best action according to q function
+        s = state.vector
+        q_s = self.perceptron.getQvector(s)
+        action = random_argmax(q_s)
+        if printing:
+            print('state vector s', s)
+            print('state box', state.box)
+            print('state history', state.readable_history)
+            print('Q(s)', q_s)
+            print('best action:', action)
+        # Execute best action to get s'
+        state.take_action(action)
+        if printing:
+            print("new state vector s'", state.vector)
+            print("s' box", state.box)
+        
+
+def test(perceptron, test_label_files, img_path=TRAIN_PATH):
+    tester = Qtest(perceptron)
+    initial_ious = []
+    adjusted_ious = []
+    changes = []
+
+    for testfile in test_label_files:
+        imgf, bb, gt = parse_label(read_label(img_path + testfile + '.labl'))
+        initial_iou = bb.iou(gt)
+        initial_ious.append(initial_iou)
+        image = load_image(img_path + imgf + '.jpg')
+        print('Image file', imgf)
+        print('Initial Box', bb, 'Ground truth', gt, 'IOU', initial_iou)
+        print('Getting new box...')
+        adjusted_box = tester.adjust_box(image, bb, n=ACTIONS_PER_EPISODE, printing=True)
+        new_iou = adjusted_box.iou(gt)
+        adjusted_ious.append(new_iou)
+        change = new_iou - initial_iou
+        changes.append(change)
+        percent_change = (new_iou - initial_iou)/initial_iou
+        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Percent change', percent_change)
+
+    avg_change = np.mean(changes)
+    print('Average change in IOU:', avg_change)
+    print('Average initial IOU', np.mean(initial_ious))
+    print('Average final IOU', np.mean(adjusted_ious))
+
+
+
+
+    return initial_ious, adjusted_ious
+
+
+
+
+# --------------------------------------------------------------------------------
 
 def show_box(image, box):
     fig, ax = plt.subplots(1)
@@ -576,7 +735,7 @@ def qlearn(NumEpochs=NUM_EPOCHS, printing=PRINTING):
                 # Select action at random
                 s = state.vector
                 Qs = perceptron.getQvector(s)
-                best_action = np.argmax(Qs)
+                best_action = random_argmax(Qs)
                 action_index = epsilon_choose(state.num_actions, best_action, epsilon=0.5)
                 action_name = state.actions[action_index].__name__
 
@@ -635,6 +794,6 @@ vgg = VggHandler()
 
 # --------------------------------------------------------------------------------
 if __name__ == '__main__':
-    Qlearn().run('testrun')
+    Qlearn().run(SAVE_FILE)
 
     
