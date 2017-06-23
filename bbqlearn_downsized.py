@@ -18,7 +18,7 @@ from collections import deque
 from scipy.special import expit
 import sys
 
-TRAIN_PATH = "../Data/Train/"
+TRAIN_PATH = "../Data/Downsized/"
 OUTPUT_PATH = "../Output/"
 SAVE_FILE = "testfile.p"
 
