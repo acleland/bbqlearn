@@ -522,8 +522,6 @@ class Qlearn:
         # print('Average extraction time:', self.action_time / self.num_epochs / len(self.train_list) / self.actions_per_episode)
         
 
-
-        
         plt.figure(1)
         x = np.arange(1,self.num_epochs+1)
         y = np.asarray(self.avg_reward_by_epoch)
