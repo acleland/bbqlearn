@@ -170,9 +170,10 @@ def make_square_with_centered_margins(img):
 # --------------------------------------------------------------------------------
 
 class Perceptron:
-    def __init__(self, num_actions, input_vector_length, learning_rate):
-        #self.weights = np.random.rand(num_actions, input_vector_length)*2 - 1
-        self.weights = np.random.randn(num_actions, input_vector_length)/np.sqrt(input_vector_length)
+    def __init__(self, num_actions, input_vector_length, learning_rate, bias=True):
+        # random weights in range -.05..+.05
+        self.weights = np.random.rand(num_actions, input_vector_length)*.1 - .05
+        #self.weights = np.random.randn(num_actions, input_vector_length)/np.sqrt(input_vector_length)
         self.learning_rate = learning_rate
     def __str__(self):
         return str(self.weights)
