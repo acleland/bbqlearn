@@ -23,7 +23,7 @@ SAVE_FILE = "testfile.p"
 
 # Parameters
 NUM_EPOCHS = 10
-TRAIN_SET_SIZE = 2
+TRAIN_SET_SIZE = 1
 ACTIONS_PER_EPISODE = 5
 DISCOUNT_FACTOR = 0.5
 LEARNING_RATE = 0.2
@@ -170,23 +170,31 @@ def make_square_with_centered_margins(img):
 # --------------------------------------------------------------------------------
 
 class Perceptron:
-    def __init__(self, num_actions, input_vector_length, learning_rate, bias=True):
+    def __init__(self, num_actions, input_vector_length):
         # random weights in range -.05..+.05
-        self.weights = np.random.rand(num_actions, input_vector_length)*.1 - .05
+        self.weights = np.random.rand(num_actions, input_vector_length + 1)*.1 - .05
         #self.weights = np.random.randn(num_actions, input_vector_length)/np.sqrt(input_vector_length)
-        self.learning_rate = learning_rate
     def __str__(self):
         return str(self.weights)
     def getQ(self, input_vector, action_index):
-        return sigmoid(np.dot(self.weights[action_index], input_vector))
+        x = np.concatenate(([1],input_vector))  # insert bias term
+        return sigmoid(np.dot(self.weights[action_index], x))
     def getQvector(self, input_vector):
-        return sigmoid(np.dot(self.weights, np.transpose(input_vector)))
-    def update_weights(self, target, output, input_vector, action_index):
-        delta_w = self.learning_rate*(target - output) * input_vector
+        x = np.concatenate(([1],input_vector))  # insert bias term
+        return sigmoid(np.dot(self.weights, np.transpose(x)))
+    def update_weights(self, target, output, input_vector, action_index, learning_rate=LEARNING_RATE):
+        x = np.concatenate(([1],input_vector))
+        delta_w = learning_rate*(target - output) * x
         self.weights[action_index] += delta_w
-    def learn(self, target, input_vector, action_index):
-        output = self.getQ(input_vector, action_index)
-        self.update_weights(target, output, input_vector, action_index)
+    def save(self, save_path):
+        np.save(save_path, self.weights)
+    @staticmethod
+    def load(load_path):
+        w = np.load(load_path)
+        r, c = w.shape
+        p = Perceptron(r,c-1)
+        p.weights = w
+        return p
 
 def testPerceptron():
     x = np.array([3.0,4.0])
@@ -411,7 +419,7 @@ class Qlearn:
         self.vgg = VggHandler()
 
         # Initialize perceptron and training data        
-        self.perceptron = Perceptron(num_actions=self.num_actions, input_vector_length=self.state_vector_length, learning_rate=self.learning_rate) 
+        self.perceptron = Perceptron(num_actions=self.num_actions, input_vector_length=self.state_vector_length) 
         self.train_list, _ = get_train_validation()
         self.train_list = self.train_list[:self.train_set_size] 
         random.shuffle(self.train_list)
