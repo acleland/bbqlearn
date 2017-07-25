@@ -140,7 +140,15 @@ class Qlearn:
                     a = epsilon_choose(env.num_actions, best_action, epsilon=EPSILON)
                     # Compute Q(s,a)
                     Qsa = Qs[a]
-                    # Show relevant information before action
+                    # Take action a to obtain s'
+                    s_prime, r = env.take_action(a)
+                    # Compute Q(s')
+                    Qs_prime = perc.getQvector(s_prime)
+                    Qs_prime_max = np.max(Qs_prime)
+                    y = sigmoid(r + DISCOUNT_FACTOR * Qs_prime_max)
+                    # Update weights
+                    perc.update_weights(y, Qsa, s, a)
+                    # Show relevant information
                     if visual:
                         env.show()
                     print('s', s)
@@ -148,20 +156,15 @@ class Qlearn:
                     print()
                     print('a:', a, env.actions[a])
                     print('Q(s,a)=', Qsa)
-                    # Take action a to obtain s'
-                    s_prime, r = env.take_action(a)
+                
                     print("s'", s_prime)
                     print("r", r)
-                    # Compute Q(s')
-                    Qs_prime = perc.getQvector(s_prime)
-                    Qs_prime_max = np.max(Qs_prime)
-                    y = sigmoid(r + DISCOUNT_FACTOR * Qs_prime_max)
+                    
                     print("max_a' Q(s'):", Qs_prime_max)
                     print("y = sigmoid( r + " + str(DISCOUNT_FACTOR) + "*max_a' Q(s') )")
                     print("y=", y)
                     print("Error: y - Q(s,a)", y - Qsa)
-                    # Update weights
-                    perc.update_weights(y, Qsa, s, a)
+                    
                     print('weights updated according to y - Q(s,a)')
                     print('new weights stats')
                     print_stats(perc.weights)
