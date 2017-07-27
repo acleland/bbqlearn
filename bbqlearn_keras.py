@@ -430,21 +430,6 @@ class Qlearn:
         self.avg_reward_by_episode = []
         self.avg_reward_by_epoch = []
 
-        # Variable for keeping track of time spent extracting features
-        # self.action_time = 0.0
-
-        # # This stuff is for initializing the q.step() function. (for visualization)
-        # self.epoch_number = 1
-        # self.episode  = 1
-        # self.actions_taken = 0
-        # self.total_actions = 0
-        
-        # random.shuffle(self.train_list)
-        # self.train_queue = deque(self.train_list)
-        # example = self.train_queue.pop()
-        # self.actions_taken = 0
-        # self.state = State(example, self.history_length)
-
         
     def __str__(self):
         s = '\nQlearn Status: \nPerceptron:\n' + str(self.perceptron)

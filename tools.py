@@ -5,6 +5,34 @@ import matplotlib.patches as patches
 import glob
 import re 
 from PIL import Image
+from keras.preprocessing import image
+
+TRAIN_PATH = "../Data/Train/"
+OUTPUT_PATH = "../Output/"
+
+# Utility Functions
+# --------------------------------------------------------------------------------
+
+def sqdist(p1, p2):
+    diff = p2 - p1
+    return np.dot(diff, diff)
+def dist(p1, p2):
+    return np.sqrt(sqdist(p1,p2))
+def sse(coords, ground_truth_coords):
+    sumv = 0
+    for i in range(len(coords)):
+        sumv += sqdist(coords[i], ground_truth_coords[i])
+    return sumv
+def sigmoid(z):
+    return expit(z)
+def onehot(i, n):
+    vec = np.zeros(n)
+    vec[i] = 1
+    return vec
+
+def random_argmax(vector):
+    v = np.asarray(vector)
+    return np.random.choice(np.flatnonzero(v == v.max()))
 
 
 # --------------------------------------------------------------------------------
@@ -124,3 +152,6 @@ def get_train_validation():
         else:
             validation.append(label)
     return train, validation
+
+
+

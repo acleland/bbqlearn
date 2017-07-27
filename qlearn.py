@@ -6,7 +6,8 @@ from scipy.special import expit
 import time
 import pickle
 from collections import deque
-
+from tools import *
+import os
 
 # from keras.applications.vgg16 import VGG16, preprocess_input, decode_predictions
 # from keras.models import Model
@@ -14,6 +15,10 @@ from collections import deque
 # from PIL import Image
 
 # Some constants
+
+NUM_EPOCHS = 3
+ACTIONS_PER_EPISODE = 2
+VISUAL = True
 
 LEARNING_RATE = 0.2
 EPSILON = 0.5
@@ -115,6 +120,19 @@ def print_stats(vector):
     print('mean', np.mean(vector))
 
 
+def bar_plot(v, xlabel=None, ylabel=None):
+    x = np.arange(len(v))
+    plt.bar(x, v)
+    if xlabel:
+        plt.xlabel(xlabel)
+    if ylabel:
+        plt.ylabel(ylabel)
+    plt.show()
+
+def print_round(name, v,decimal=3):
+    print(name, np.around(v,decimal)) 
+
+
 # Q-learning algorithm
 
 class Qlearn:
@@ -122,15 +140,23 @@ class Qlearn:
         self.env = env
         self.perc = Perceptron(env.num_actions, env.state_length)
 
-    def run(self, save_path, train_list, num_epochs, actions_per_episode, visual=True):
+    def run(self, save_path, train_list, num_epochs= NUM_EPOCHS, actions_per_episode=ACTIONS_PER_EPISODE, visual=VISUAL):
         np.random.shuffle(train_list)
         env = self.env
         perc = self.perc
+        # init reward data
+        avg_reward_by_epoch = []
+        weights_by_epoch = []
         for epoch in range(1, num_epochs+1):
+            rewards_this_epoch = []
+            print('Epoch', epoch, 'of', num_epochs)
             for episode in range(1, len(train_list)+1):
+                print('Episode', episode, 'of', len(train_list))
                 train_ex = train_list[episode-1]
+                print(train_ex)
                 env.load(train_ex)
                 for i in range(1, actions_per_episode+1):
+                    print('Action', i)
                     # Get the state from the environment
                     s = env.get_state()
                     # Get Q(s) vector
@@ -142,6 +168,7 @@ class Qlearn:
                     Qsa = Qs[a]
                     # Take action a to obtain s'
                     s_prime, r = env.take_action(a)
+                    rewards_this_epoch.append(r)
                     # Compute Q(s')
                     Qs_prime = perc.getQvector(s_prime)
                     Qs_prime_max = np.max(Qs_prime)
@@ -151,23 +178,52 @@ class Qlearn:
                     # Show relevant information
                     if visual:
                         env.show()
-                    print('s', s)
-                    print_stats(s)
-                    print()
+                    
+                    print_round('Q(s)', Qs)
+                    if visual:
+                        bar_plot(Qs, 'action a', 'Q(s,a)')
                     print('a:', a, env.actions[a])
                     print('Q(s,a)=', Qsa)
                 
-                    print("s'", s_prime)
+                    print("\ns', r computed from action a")
                     print("r", r)
-                    
+                    print_round("Q(s')", Qs_prime)
+                    if visual:
+                        bar_plot(Qs_prime, 'action a', "Q(s',a)")
                     print("max_a' Q(s'):", Qs_prime_max)
-                    print("y = sigmoid( r + " + str(DISCOUNT_FACTOR) + "*max_a' Q(s') )")
+
+                    print("\ny = sigmoid( r + " + str(DISCOUNT_FACTOR) + "*max_a' Q(s') )")
                     print("y=", y)
                     print("Error: y - Q(s,a)", y - Qsa)
                     
                     print('weights updated according to y - Q(s,a)')
                     print('new weights stats')
                     print_stats(perc.weights)
+                    print()
+            avg_reward_by_epoch.append(np.mean(rewards_this_epoch))
+            weights_by_epoch.append(np.copy(perc.weights))
+        print('Training complete. Saving to ' + save_path)
+        # Save data and charts from run
+        percname = save_path + '/perceptron.npy'
+        rname = save_path + '/avg_reward_by_epoch.npy'
+        wname = save_path + '/weights_by_epoch.npy'
+        rfigname = save_path + '/reward_by_epoch.pdf'
+        os.makedirs(os.path.dirname(percname), exist_ok=True)
+        os.makedirs(os.path.dirname(rname), exist_ok=True)
+        os.makedirs(os.path.dirname(wname), exist_ok=True)
+        os.makedirs(os.path.dirname(rfigname), exist_ok=True)
+        perc.save(percname)
+        np.save(rname, avg_reward_by_epoch)
+        np.save(wname, weights_by_epoch)
+        plt.figure(1)
+        x = np.arange(1,num_epochs+1)
+        y = np.asarray(avg_reward_by_epoch)
+        plt.plot(x,y)
+        plt.xlabel('Epoch')
+        plt.ylabel('Average Reward')
+        plt.savefig(rfigname, bbox_inches='tight')
+        if visual:
+            plt.show()
 
      
 
