@@ -127,12 +127,14 @@ class CNN_Env:
         self.num_features = num_features
         self.state_length = state_length
         self.vgg = VggHandler()
-        self.state = None        
+        self.state = None
+        self.episode = None        
 
     def load(self, example):
         imgf, bb, self.gt = parse_label(read_label(TRAIN_PATH + example + '.labl'))
         img = load_image(TRAIN_PATH + imgf + '.jpg')
         self.state = State(img, bb, history_length)
+        self.episode = (self.gt, [bb])
 
     def get_state(self):
         return self.state.get_vector(self.vgg)
@@ -140,9 +142,46 @@ class CNN_Env:
     def take_action(self, a):
         iou = self.state.box.iou(self.gt)
         self.state.take_action(a)
+        self.episode[1].append(self.state.box)
         new_iou = self.state.box.iou(self.gt)
         r = np.sign(new_iou-iou)
         return self.state.get_vector(self.vgg), r
 
     def show(self):
-        pass
+        gt = self.episode[0]
+        hist = self.episode[1]
+        boxes = [gt]
+        boxes.append(hist[-1])
+        colors = ['y', 'r']
+        if len(hist) > 1:
+            boxes.append(hist[-2])
+            colors.append('w')
+        plot_img_boxes(self.state.image, boxes, colors)
+
+
+
+
+# --------------------------------------------------------------------------------
+
+def plot_img_boxes(img, boxes, colors=None):
+    fig,ax = plt.subplots(1)
+    ax.imshow(img)
+    # if colors is None:
+    #     colors = ['r']*len(boxes)
+   
+    for box, col in zip(boxes, colors):
+        rect = patches.Rectangle((box.x,box.y),box.width,box.height, linewidth=2,edgecolor=col,facecolor='none')
+        ax.add_patch(rect)
+    box_lefts = [box.x for box in boxes]
+    box_tops = [box.y for box in boxes]
+    box_rights = [box.x + box.width for box in boxes]
+    box_bottoms = [box.y + box.height for box in boxes]
+    margin = 100
+    img_box = img.getbbox()
+    left_xlim = max(0, min(box_lefts) - margin)
+    right_xlim = min(img_box[2], max(box_rights) + margin)
+    top_ylim = max(0, min(box_tops) - margin)
+    bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
+    ax.set_xlim(left_xlim, right_xlim)
+    ax.set_ylim(bottom_ylim, top_ylim)
+    plt.show()
