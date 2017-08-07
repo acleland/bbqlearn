@@ -161,6 +161,8 @@ class CNN_Env:
 
 
 
+
+
 # --------------------------------------------------------------------------------
 
 def plot_img_boxes(img, boxes, colors=None):
@@ -185,3 +187,4 @@ def plot_img_boxes(img, boxes, colors=None):
     ax.set_xlim(left_xlim, right_xlim)
     ax.set_ylim(bottom_ylim, top_ylim)
     plt.show()
+

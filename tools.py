@@ -134,15 +134,15 @@ def parse_label(label):
 def load_image(filepath):
     return image.load_img(filepath)
 
-def get_train_labels():
+def get_train_labels(path):
     fnames = []
-    for labelFile in glob.glob(TRAIN_PATH + '*.labl'):
-        labelName = re.search(TRAIN_PATH + '(.+)\.labl', labelFile).group(1)
+    for labelFile in glob.glob(path + '*.labl'):
+        labelName = re.search(path + '(.+)\.labl', labelFile).group(1)
         fnames.append(labelName)
     return fnames
 
-def get_train_validation():
-    labels = get_train_labels()
+def get_train_validation(path):
+    labels = get_train_labels(path)
     train = []
     validation = []
     for label in labels:
@@ -152,6 +152,14 @@ def get_train_validation():
         else:
             validation.append(label)
     return train, validation
+
+def get_labels(minv, maxv):
+    labels = []
+    for i in range(minv,maxv):
+        for j in range(10):
+            labels.append('pdw' + str(i) + chr(97 + j))
+    return labels
+        
 
 
 

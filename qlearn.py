@@ -22,7 +22,7 @@ VISUAL = True
 
 LEARNING_RATE = 0.2
 EPSILON = 0.5
-DISCOUNT_FACTOR = 0.5
+DISCOUNT_FACTOR = 0.1
 
 # Utility Functions
 
@@ -133,6 +133,18 @@ def print_round(name, v,decimal=3):
     print(name, np.around(v,decimal)) 
 
 
+def show_weights(m, n):
+    vmin = min(-.1, min(np.min(m),np.min(n)))
+    vmax = max(.1, max(np.max(m),np.max(n)))
+    fig, axes = plt.subplots(nrows=2)
+    plot = axes[0].matshow(m, cmap='rainbow', aspect='auto', vmin=vmin, vmax=vmax)
+    plot2 = axes[1].matshow(n, cmap='rainbow',aspect='auto', vmin=vmin, vmax=vmax)
+    cbar_ax = fig.add_axes([1, 0.15, 0.05, 0.7])
+    fig.suptitle('Weights before and after')
+    fig.colorbar(plot, cax=cbar_ax)
+    plt.show()
+    plt.clf()
+
 # Q-learning algorithm
 
 class Qlearn:
@@ -146,7 +158,7 @@ class Qlearn:
         perc = self.perc
         # init reward data
         avg_reward_by_epoch = []
-        weights_by_epoch = []
+        weights_by_epoch = [np.copy(perc.weights)]
         for epoch in range(1, num_epochs+1):
             rewards_this_epoch = []
             print('Epoch', epoch, 'of', num_epochs)
@@ -178,6 +190,8 @@ class Qlearn:
                     Qs_prime_max = np.max(Qs_prime)
                     y = sigmoid(r + DISCOUNT_FACTOR * Qs_prime_max)
                     # Update weights
+                    if visual:
+                        old_weights = np.copy(perc.weights)
                     perc.update_weights(y, Qsa, s, a)
                     # Show relevant information
                     
@@ -205,6 +219,8 @@ class Qlearn:
                     print('weights updated according to y - Q(s,a)')
                     print('new weights stats')
                     print_stats(perc.weights)
+                    if visual:
+                        show_weights(old_weights, perc.weights)
                     print()
             avg_reward_by_epoch.append(np.mean(rewards_this_epoch))
             weights_by_epoch.append(np.copy(perc.weights))
