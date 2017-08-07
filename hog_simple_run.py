@@ -1,14 +1,18 @@
 from qlearn import *
 from HOG_Env import *
 from tools import *
+import random
+import pickle
 
 qlearn = Qlearn(HOG_Env())
-train_list, _ = get_train_validation()
+train_list = get_labels(1, 390)
+tlist = random.sample(train_list, 5)
 t = time.time()
-qlearn.run('hog_full_train_set_epochs100_ape15', train_list, 
-    num_epochs=100, 
+qlearn.run('hog_simple_run', tlist, 
+    num_epochs=10, 
     actions_per_episode=15,
     visual = False)
 dt = time.time() - t
 print('\ntime', dt)
-
+print('train list', tlist)
+pickle.dump('hog_simple_run/tlist.p', tlist)
