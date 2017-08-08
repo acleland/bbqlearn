@@ -9,10 +9,10 @@ train_list = get_labels(1, 390)
 tlist = random.sample(train_list, 5)
 t = time.time()
 qlearn.run('hog_simple_run', tlist, 
-    num_epochs=10, 
+    num_epochs=2, 
     actions_per_episode=15,
     visual = False)
 dt = time.time() - t
 print('\ntime', dt)
 print('train list', tlist)
-pickle.dump('hog_simple_run/tlist.p', tlist)
+
