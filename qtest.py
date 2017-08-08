@@ -1,3 +1,4 @@
+#!/usr/local/bin/python3
 from qlearn import *
 from HOG_Env import *
 from tools import *
@@ -35,7 +36,7 @@ class Qtest:
         # Execute best action to get s'
         state.take_action(action)
         if printing:
-            # print("new state vector s'", state.vector)
+            print("new state vector s'", state.vector)
             print("s' box", state.box)
         
 
@@ -78,16 +79,20 @@ def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img
     adjusted_ious = []
     box_data = []
 
+    count = 0
+
     for testfile in test_label_files:
+        count +=1
+        print(count, '/', len(test_label_files))
         imgf, bb, gt = parse_label(read_label(LABEL_PATH + testfile + '.labl'))
         original_box = bb.toVector()
         ground_truth = gt.toVector()
         initial_iou = bb.iou(gt)
         image = load_image(img_path + imgf + '.jpg')
-        print('Image file', imgf)
-        print('Initial Box', bb, 'Ground truth', gt, 'IOU', initial_iou)
-        print('Getting new box...')
-        adjusted_box = tester.adjust_box(image, bb, n, printing=True)
+        #print('Image file', imgf)
+        #print('Initial Box', bb, 'Ground truth', gt, 'IOU', initial_iou)
+        #print('Getting new box...')
+        adjusted_box = tester.adjust_box(image, bb, n, printing=False)
         final_box = adjusted_box.toVector()
         new_iou = adjusted_box.iou(gt)
         change = new_iou - initial_iou

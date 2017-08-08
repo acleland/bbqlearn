@@ -27,8 +27,8 @@ BLOCK_NORM = 'L2'
 
 
 
-SHIFT = 5  # number of pixels box shifts by in each left, right, up, down action
-ZOOM_FRAC = 0.1  # Fraction box zooms by in bigger, smaller, taller, fatter actions
+SHIFT_FRAC = 0.2  # Fraction of width (height) shifted left/right (up/down)
+ZOOM_FRAC = 0.2  # Fraction box zooms by in bigger, smaller, taller, fatter actions
 
 PRINTING = False
 
@@ -72,8 +72,6 @@ class State:
             self.history.appendleft(np.zeros(self.num_actions))
         self.readable_history = deque(maxlen=history_length)
 
-        self.shift = SHIFT
-        self.zoom_frac = ZOOM_FRAC
         self.done = False
 
     def __str__(self):
@@ -93,21 +91,21 @@ class State:
     # Actions: (Don't call these explicitly, otherwise, state history  and features 
     #           won't update correctly. Instead use state.take_action(action_number).)
     def left(self):
-        self.box = self.box.adjust_x(-self.shift)
+        self.box = self.box.adjust_x(-SHIFT_FRAC * self.box.width)
     def right(self):
-        self.box = self.box.adjust_x(self.shift)
+        self.box = self.box.adjust_x(SHIFT_FRAC * self.box.width)
     def up(self):
-        self.box = self.box.adjust_y(-self.shift) 
+        self.box = self.box.adjust_y(-SHIFT_FRAC * self.box.height) 
     def down(self):
-        self.box = self.box.adjust_y(self.shift) 
+        self.box = self.box.adjust_y(SHIFT_FRAC * self.box.height) 
     def bigger(self):
-        self.box = self.box.zoom(1.0+self.zoom_frac)
+        self.box = self.box.zoom(1.0+ZOOM_FRAC)
     def smaller(self):
-        self.box = self.box.zoom(1.0-self.zoom_frac)
+        self.box = self.box.zoom(1.0-ZOOM_FRAC)
     def fatter(self):
-        self.box = self.box.adjust_width(1+self.zoom_frac)
+        self.box = self.box.adjust_width(1+ZOOM_FRAC)
     def taller(self):
-        self.box = self.box.adjust_height(1+self.zoom_frac)
+        self.box = self.box.adjust_height(1+ZOOM_FRAC)
     def stop(self):
         self.done = True
 
