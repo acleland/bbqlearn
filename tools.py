@@ -155,7 +155,7 @@ def get_train_validation(path):
 
 def get_labels(minv, maxv):
     labels = []
-    for i in range(minv,maxv):
+    for i in range(minv,maxv+1):
         for j in range(10):
             labels.append('pdw' + str(i) + chr(97 + j))
     return labels
