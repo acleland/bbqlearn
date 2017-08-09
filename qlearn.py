@@ -152,7 +152,11 @@ class Qlearn:
         self.env = env
         self.perc = Perceptron(env.num_actions, env.state_length)
 
-    def run(self, save_path, train_list, num_epochs= NUM_EPOCHS, actions_per_episode=ACTIONS_PER_EPISODE, visual=VISUAL):
+    def run(self, save_path, train_list, num_epochs= NUM_EPOCHS, 
+                                        actions_per_episode=ACTIONS_PER_EPISODE,
+                                        learning_rate=LEARNING_RATE,
+                                        discount_factor=DISCOUNT_FACTOR, 
+                                        visual=VISUAL):
         np.random.shuffle(train_list)
         env = self.env
         perc = self.perc
@@ -163,13 +167,16 @@ class Qlearn:
             rewards_this_epoch = []
             print('Epoch', epoch, 'of', num_epochs)
             for episode in range(1, len(train_list)+1):
-                print('Episode', episode, 'of', len(train_list))
+                if visual:
+                    print('Episode', episode, 'of', len(train_list))
                 train_ex = train_list[episode-1]
-                print(train_ex)
+                if visual:
+                    print(train_ex)
                 env.load(train_ex)
                 s_prime = None
                 for i in range(1, actions_per_episode+1):
-                    print('Action', i)
+                    if visual:
+                        print('Action', i)
                     # Get the state from the environment
                     if s_prime is not None:
                         s = s_prime
@@ -188,40 +195,38 @@ class Qlearn:
                     # Compute Q(s')
                     Qs_prime = perc.getQvector(s_prime)
                     Qs_prime_max = np.max(Qs_prime)
-                    y = sigmoid(r + DISCOUNT_FACTOR * Qs_prime_max)
+                    y = sigmoid(r + discount_factor * Qs_prime_max)
                     # Update weights
                     if visual:
                         old_weights = np.copy(perc.weights)
-                    perc.update_weights(y, Qsa, s, a)
+                    perc.update_weights(y, Qsa, s, a, learning_rate)
                     # Show relevant information
                     
                     
-                    print_round('Q(s)', Qs)
-                    # if visual:
-                    #     bar_plot(Qs, 'action a', 'Q(s,a)')
-                    print('a:', a, env.actions[a])
-                    print('Q(s,a)=', Qsa)
+                    
+        
+                    if visual:
+                        print_round('Q(s)', Qs)
+                        print('a:', a, env.actions[a])
+                        print('Q(s,a)=', Qsa)
                     
                     if visual:
                         env.show()
+                        print("\ns', r computed from action a")
+                        print("r", r)
+                        print_round("Q(s')", Qs_prime)
+                        print("max_a' Q(s'):", Qs_prime_max)
 
-                    print("\ns', r computed from action a")
-                    print("r", r)
-                    print_round("Q(s')", Qs_prime)
-                    # if visual:
-                    #     bar_plot(Qs_prime, 'action a', "Q(s',a)")
-                    print("max_a' Q(s'):", Qs_prime_max)
-
-                    print("\ny = sigmoid( r + " + str(DISCOUNT_FACTOR) + "*max_a' Q(s') )")
-                    print("y=", y)
-                    print("Error: y - Q(s,a)", y - Qsa)
-                    
-                    print('weights updated according to y - Q(s,a)')
-                    print('new weights stats')
-                    print_stats(perc.weights)
-                    if visual:
-                        show_weights(old_weights, perc.weights)
-                    print()
+                        print("\ny = sigmoid( r + " + str(discount_factor) + "*max_a' Q(s') )")
+                        print("y=", y)
+                        print("Error: y - Q(s,a)", y - Qsa)
+                        
+                        print('weights updated according to y - Q(s,a)')
+                        print('new weights stats')
+                        print_stats(perc.weights)
+                        if visual:
+                            show_weights(old_weights, perc.weights)
+                        print()
             avg_reward_by_epoch.append(np.mean(rewards_this_epoch))
             weights_by_epoch.append(np.copy(perc.weights))
         print('Training complete. Saving to ' + save_path)
