@@ -104,8 +104,10 @@ class State:
         self.box = self.box.zoom(1.0-ZOOM_FRAC)
     def fatter(self):
         self.box = self.box.adjust_width(1+ZOOM_FRAC)
+        self.box = self.box.adjust_height(1-ZOOM_FRAC/(1+ZOOM_FRAC))
     def taller(self):
         self.box = self.box.adjust_height(1+ZOOM_FRAC)
+        self.box = self.box.adjust_width(1-ZOOM_FRAC/(1+ZOOM_FRAC))
     def stop(self):
         self.done = True
 
