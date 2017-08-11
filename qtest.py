@@ -59,8 +59,8 @@ def test(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=TRAIN_PAT
         adjusted_ious.append(new_iou)
         change = new_iou - initial_iou
         changes.append(change)
-        percent_change = (new_iou - initial_iou)/initial_iou
-        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Percent change', percent_change)
+        #percent_change = (new_iou - initial_iou)/initial_iou
+        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Change', change)
 
     avg_change = np.mean(changes)
     print('Average change in IOU:', avg_change)
@@ -96,13 +96,15 @@ def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img
         final_box = adjusted_box.toVector()
         new_iou = adjusted_box.iou(gt)
         change = new_iou - initial_iou
-        percent_change = (new_iou - initial_iou)/initial_iou
+        if initial_iou == 0:
+            print('zero init iou found in', testfile)
+        #percent_change = (new_iou - initial_iou)/initial_iou
         iou_data.append((testfile, initial_iou, new_iou, change))
         changes.append(change)
         initial_ious.append(initial_iou)
         adjusted_ious.append(new_iou)
         box_data.append((testfile, ground_truth, original_box, final_box))
-        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Percent change', percent_change)
+        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Change', change)
 
     avg_change = np.mean(changes)
     print('Average change in IOU:', avg_change)
