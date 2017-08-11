@@ -5,7 +5,8 @@ import matplotlib.patches as patches
 import glob
 import re 
 from PIL import Image
-from keras.preprocessing import image
+#from keras.preprocessing import image
+from scipy.special import expit
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
@@ -132,8 +133,8 @@ def parse_label(label):
     return image_filename, bb, gt
 
 def load_image(filepath):
-    return image.load_img(filepath)
-
+    #return image.load_img(filepath)
+    return Image.open(filepath)
 def get_train_labels(path):
     fnames = []
     for labelFile in glob.glob(path + '*.labl'):

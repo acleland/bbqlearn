@@ -131,6 +131,7 @@ class HOG_Env:
     def load(self, example):
         imgf, bb, self.gt = parse_label(read_label(LABEL_PATH + example + '.labl'))
         img = load_image(IMAGE_PATH + imgf + '.jpg')
+        size = img.size
         self.state = State(img, bb, history_length)
         self.episode = (self.gt, [bb])
 

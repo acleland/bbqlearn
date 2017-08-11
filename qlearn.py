@@ -155,7 +155,8 @@ class Qlearn:
     def run(self, save_path, train_list, num_epochs= NUM_EPOCHS, 
                                         actions_per_episode=ACTIONS_PER_EPISODE,
                                         learning_rate=LEARNING_RATE,
-                                        discount_factor=DISCOUNT_FACTOR, 
+                                        discount_factor=DISCOUNT_FACTOR,
+                                        epsilon = EPSILON, 
                                         visual=VISUAL):
         np.random.shuffle(train_list)
         env = self.env
@@ -186,7 +187,7 @@ class Qlearn:
                     Qs = perc.getQvector(s)
                     # Select action according to epsilon greedy
                     best_action = random_argmax(Qs)
-                    a = epsilon_choose(env.num_actions, best_action, epsilon=EPSILON)
+                    a = epsilon_choose(env.num_actions, best_action, epsilon=epsilon)
                     # Compute Q(s,a)
                     Qsa = Qs[a]
                     # Take action a to obtain s'
