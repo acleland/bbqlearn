@@ -13,7 +13,7 @@ from tools import *
 # Some constants
 
 IMAGE_PATH = "../Data/Train/"
-LABEL_PATH = "../Data/Skews_lowIOU/"
+LABEL_PATH = "../Data/Skews3/"
 OUTPUT_PATH = "../Output/"
 
 actions = ['left','right','up','down','bigger','smaller','fatter','taller','stop']
@@ -118,17 +118,19 @@ class State:
 # --------------------------------------------------------------------------------
 
 class HOG_Env:
-    def __init__(self):
+    def __init__(self, image_path=IMAGE_PATH, label_path = LABEL_PATH):
         self.actions = actions
         self.num_actions = num_actions
         self.num_features = NUM_FEATURES
         self.state_length = STATE_LENGTH
         self.state = None
-        self.episode = None    
+        self.episode = None
+        self.label_path = label_path
+        self.image_path = image_path    
 
     def load(self, example):
-        imgf, bb, self.gt = parse_label(read_label(LABEL_PATH + example + '.labl'))
-        img = load_image(IMAGE_PATH + imgf + '.jpg')
+        imgf, bb, self.gt = parse_label(read_label(self.label_path + example + '.labl'))
+        img = load_image(self.image_path + imgf + '.jpg')
         size = img.size
         self.state = State(img, bb, history_length)
         self.episode = (self.gt, [bb])
@@ -165,8 +167,8 @@ class HOG_Env:
 def plot_img_boxes(img, boxes, colors=None):
     fig,ax = plt.subplots(1)
     ax.imshow(img)
-    # if colors is None:
-    #     colors = ['r']*len(boxes)
+    if colors is None:
+        colors = ['r']*len(boxes)
    
     for box, col in zip(boxes, colors):
         rect = patches.Rectangle((box.x,box.y),box.width,box.height, linewidth=2,edgecolor=col,facecolor='none')
@@ -183,7 +185,7 @@ def plot_img_boxes(img, boxes, colors=None):
     bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
     ax.set_xlim(left_xlim, right_xlim)
     ax.set_ylim(bottom_ylim, top_ylim)
-    plt.show()
+    #plt.show()
 
 def show_hog(image):
     resized = resize(image, (128,128))
