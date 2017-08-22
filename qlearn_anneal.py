@@ -95,12 +95,15 @@ class Perceptron:
     def save(self, save_path):
         np.save(save_path, self.weights)
     @staticmethod
-    def load(load_path):
-        w = np.load(load_path)
+    def from_weights(w):
         r, c = w.shape
         p = Perceptron(r,c-1)
         p.weights = w
         return p
+    @staticmethod
+    def load(load_path):
+        w = np.load(load_path)
+        return Perceptron.from_weights(w)
 
 def testPerceptron():
     x = np.array([3.0,4.0])

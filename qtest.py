@@ -1,12 +1,12 @@
 #!/usr/local/bin/python3
-from qlearn import *
+from qlearn_anneal import *
 from HOG_Env import *
 from tools import *
 import sys
 
 ACTIONS_PER_EPISODE = 15
 IMAGE_PATH = '../Data/Train/'
-LABEL_PATH = '../Data/Skews_lowIOU/'
+LABEL_PATH = '../Data/Skews_lowIOU_3/'
 
 # --------------------------------------------------------------------------------
 # Q Testing (try to improve bounding boxes with trained q perceptron)
