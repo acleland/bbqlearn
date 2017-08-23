@@ -185,6 +185,7 @@ def plot_img_boxes(img, boxes, colors=None):
     bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
     ax.set_xlim(left_xlim, right_xlim)
     ax.set_ylim(bottom_ylim, top_ylim)
+    return ax
     #plt.show()
 
 def show_hog(image):
