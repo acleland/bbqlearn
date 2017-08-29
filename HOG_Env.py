@@ -12,9 +12,14 @@ from tools import *
 
 # Some constants
 
+HUMANS = "../Data/Humans/"
+DOGS = "../Data/Skews3/"
+
 IMAGE_PATH = "../Data/Train/"
-LABEL_PATH = "../Data/Skews3/"
+LABEL_PATH = HUMANS
 OUTPUT_PATH = "../Output/"
+
+
 
 actions = ['left','right','up','down','bigger','smaller','fatter','taller','stop']
 num_actions = len(actions)
@@ -23,8 +28,6 @@ ORIENTATIONS = 9
 PIXELS_PER_CELL = (16, 16)
 CELLS_PER_BLOCK = (3,3)
 BLOCK_NORM = 'L2'
-
-
 
 
 SHIFT_FRAC = 0.1  # Fraction of width (height) shifted left/right (up/down)

@@ -5,6 +5,7 @@ import matplotlib.patches as patches
 import glob
 import re 
 from PIL import Image
+from collections import namedtuple
 #from keras.preprocessing import image
 from scipy.special import expit
 
@@ -35,6 +36,8 @@ def random_argmax(vector):
     v = np.asarray(vector)
     return np.random.choice(np.flatnonzero(v == v.max()))
 
+
+ImageData = namedtuple('ImageData', 'width, height dogs people')
 
 # --------------------------------------------------------------------------------
 

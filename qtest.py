@@ -5,8 +5,7 @@ from tools import *
 import sys
 
 ACTIONS_PER_EPISODE = 15
-IMAGE_PATH = '../Data/Train/'
-LABEL_PATH = '../Data/Skews_lowIOU_3/'
+
 
 # --------------------------------------------------------------------------------
 # Q Testing (try to improve bounding boxes with trained q perceptron)
@@ -71,7 +70,7 @@ def test(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=TRAIN_PAT
 
 
 
-def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=IMAGE_PATH):
+def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=IMAGE_PATH, label_path = LABEL_PATH):
     tester = Qtest(perceptron)
     iou_data = []
     changes = []
@@ -84,7 +83,7 @@ def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img
     for testfile in test_label_files:
         count +=1
         print(count, '/', len(test_label_files))
-        imgf, bb, gt = parse_label(read_label(LABEL_PATH + testfile + '.labl'))
+        imgf, bb, gt = parse_label(read_label(label_path + testfile + '.labl'))
         original_box = bb.toVector()
         ground_truth = gt.toVector()
         initial_iou = bb.iou(gt)
