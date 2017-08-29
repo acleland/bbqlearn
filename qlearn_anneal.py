@@ -216,10 +216,7 @@ class Qlearn:
                         old_weights = np.copy(perc.weights)
                     perc.update_weights(y, Qsa, s, a, learning_rate)
                     # Show relevant information
-                    
-                    
-                    
-        
+                          
                     if visual:
                         print_round('Q(s)', Qs)
                         print('a:', a, env.actions[a])
@@ -244,24 +241,27 @@ class Qlearn:
                         print()
             avg_reward_by_epoch.append(np.mean(rewards_this_epoch))
             weights_by_epoch.append(np.copy(perc.weights))
+            # Save Data every epoch
+            percname = save_path + '/perceptron.npy'
+            rname = save_path + '/avg_reward_by_epoch.npy'
+            wname = save_path + '/weights_by_epoch.npy'
+            rfigname = save_path + '/reward_by_epoch.pdf'
+            tlistname = save_path + '/train_list.p'
+            eps_name = save_path + '/epsilon_by_epoch.npy'
+            os.makedirs(os.path.dirname(percname), exist_ok=True)
+            os.makedirs(os.path.dirname(rname), exist_ok=True)
+            os.makedirs(os.path.dirname(wname), exist_ok=True)
+            os.makedirs(os.path.dirname(wname), exist_ok=True)
+            os.makedirs(os.path.dirname(eps_name), exist_ok=True)
+            perc.save(percname)
+            np.save(rname, avg_reward_by_epoch)
+            np.save(wname, weights_by_epoch)
+            np.save(eps_name, epsilon_by_epoch)
+            pickle.dump(train_list, open(tlistname, 'wb'))
+
         print('Training complete. Saving to ' + save_path)
         # Save data and charts from run
-        percname = save_path + '/perceptron.npy'
-        rname = save_path + '/avg_reward_by_epoch.npy'
-        wname = save_path + '/weights_by_epoch.npy'
-        rfigname = save_path + '/reward_by_epoch.pdf'
-        tlistname = save_path + '/train_list.p'
-        eps_name = save_path + '/epsilon_by_epoch.npy'
-        os.makedirs(os.path.dirname(percname), exist_ok=True)
-        os.makedirs(os.path.dirname(rname), exist_ok=True)
-        os.makedirs(os.path.dirname(wname), exist_ok=True)
-        os.makedirs(os.path.dirname(wname), exist_ok=True)
-        os.makedirs(os.path.dirname(eps_name), exist_ok=True)
-        perc.save(percname)
-        np.save(rname, avg_reward_by_epoch)
-        np.save(wname, weights_by_epoch)
-        np.save(eps_name, epsilon_by_epoch)
-        pickle.dump(train_list, open(tlistname, 'wb'))
+    
         if visual:
             os.makedirs(os.path.dirname(rfigname), exist_ok=True)
             plt.figure(1)
@@ -272,6 +272,7 @@ class Qlearn:
             plt.ylabel('Average Reward')
             plt.savefig(rfigname, bbox_inches='tight')
             plt.show()
+
 
 
 # --------------------------------------------------------------------------------
