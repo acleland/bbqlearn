@@ -16,7 +16,7 @@ HUMANS = "../Data/Humans/"
 DOGS = "../Data/Skews3/"
 
 IMAGE_PATH = "../Data/Train/"
-LABEL_PATH = HUMANS
+LABEL_PATH = DOGS
 OUTPUT_PATH = "../Output/"
 
 

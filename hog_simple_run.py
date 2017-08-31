@@ -1,4 +1,4 @@
-from qlearn import *
+from qlearn_anneal import *
 from HOG_Env import *
 from tools import *
 import random
@@ -6,10 +6,10 @@ import pickle
 
 qlearn = Qlearn(HOG_Env())
 train_list = get_labels(1, 390)
-tlist = random.sample(train_list, 5)
+tlist = random.sample(train_list, 100)
 t = time.time()
 qlearn.run('hog_simple_run', tlist, 
-    num_epochs=2, 
+    num_epochs=10, 
     actions_per_episode=15,
     visual = False)
 dt = time.time() - t
