@@ -6,29 +6,28 @@ from collections import deque
 from scipy.special import expit
 from skimage import feature, color, exposure
 import sys
-
+from qlearn import *
 from tools import *
 
 
 # Some constants
 
-HUMANS = "../Data/Humans/"
-DOGS = "../Data/Skews3/"
-
-IMAGE_PATH = "../Data/Train/"
-LABEL_PATH = DOGS
-OUTPUT_PATH = "../Output/"
-
 
 
 actions = ['left','right','up','down','bigger','smaller','fatter','taller','stop']
-num_actions = len(actions)
-history_length = 10
+NUM_ACTIONS = len(actions)
+HISTORY_LENGTH = 10
+IMAGE_SIZE = (128, 128)
 ORIENTATIONS = 9
 PIXELS_PER_CELL = (16, 16)
 CELLS_PER_BLOCK = (3,3)
 BLOCK_NORM = 'L2'
 
+def num_features(w,pbc,cpb,bins):
+    return np.power(cpb,2)*bins*np.power(w//pbc - cpb + 1, 2)
+
+NUM_FEATURES = num_features(IMAGE_SIZE[0],PIXELS_PER_CELL[0],CELLS_PER_BLOCK[0],ORIENTATIONS)
+STATE_LENGTH = NUM_FEATURES + NUM_ACTIONS*HISTORY_LENGTH
 
 SHIFT_FRAC = 0.1  # Fraction of width (height) shifted left/right (up/down)
 ZOOM_FRAC = 0.1  # Fraction box zooms by in bigger, smaller, taller, fatter actions
@@ -40,7 +39,7 @@ PRINTING = False
 # HOG Stuff
 # --------------------------------------------------------------------------------
 def hog(img, visual):
-    resized = resize(img, (128,128))
+    resized = resize(img, IMAGE_SIZE)
     gray = color.rgb2gray(np.array(resized))
     return feature.hog(gray, orientations = ORIENTATIONS,
                         pixels_per_cell = PIXELS_PER_CELL,
@@ -51,17 +50,9 @@ def hog(img, visual):
 
 # --------------------------------------------------------------------------------
 
-# Sample picture just to compute feature length
-pdw1 = load_image('../Data/Train/pdw1.jpg')
-f = hog(pdw1, False)
-
-NUM_FEATURES = len(f)
-STATE_LENGTH = NUM_FEATURES + num_actions*history_length
-
-
 
 class State:
-    def __init__(self, image, box, history_length=history_length):
+    def __init__(self, image, box, history_length=HISTORY_LENGTH):
         
         self.image = image
         self.box = box.copy()
@@ -120,47 +111,47 @@ class State:
 
 # --------------------------------------------------------------------------------
 
-class HOG_Env:
-    def __init__(self, image_path=IMAGE_PATH, label_path = LABEL_PATH):
-        self.actions = actions
-        self.num_actions = num_actions
-        self.num_features = NUM_FEATURES
-        self.state_length = STATE_LENGTH
-        self.state = None
-        self.episode = None
-        self.label_path = label_path
-        self.image_path = image_path    
+# class HOG_Env:
+#     def __init__(self, image_path=IMAGE_PATH, label_path = LABEL_PATH):
+#         self.actions = actions
+#         self.num_actions = num_actions
+#         self.num_features = NUM_FEATURES
+#         self.state_length = STATE_LENGTH
+#         self.state = None
+#         self.episode = None
+#         self.label_path = label_path
+#         self.image_path = image_path    
 
-    def load(self, example):
-        imgf, bb, self.gt = parse_label(read_label(self.label_path + example + '.labl'))
-        img = load_image(self.image_path + imgf + '.jpg')
-        size = img.size
-        self.state = State(img, bb, history_length)
-        self.episode = (self.gt, [bb])
+#     def load(self, example):
+#         imgf, bb, self.gt = parse_label(read_label(self.label_path + example + '.labl'))
+#         img = load_image(self.image_path + imgf + '.jpg')
+#         size = img.size
+#         self.state = State(img, bb, HISTORY_LENGTH)
+#         self.episode = (self.gt, [bb])
 
 
-    def get_state(self):
-        return self.state.get_vector()
+#     def get_state(self):
+#         return self.state.get_vector()
 
-    def take_action(self, a):
-        iou = self.state.box.iou(self.gt)
-        self.state.take_action(a)
-        self.episode[1].append(self.state.box)
-        new_iou = self.state.box.iou(self.gt)
-        r = np.sign(new_iou-iou)
-        return self.state.get_vector(), r
+#     def take_action(self, a):
+#         iou = self.state.box.iou(self.gt)
+#         self.state.take_action(a)
+#         self.episode[1].append(self.state.box)
+#         new_iou = self.state.box.iou(self.gt)
+#         r = np.sign(new_iou-iou)
+#         return self.state.get_vector(), r
 
-    def show(self):
-        gt = self.episode[0]
-        hist = self.episode[1]
-        boxes = [gt]
-        boxes.append(hist[-1])
-        colors = ['y', 'r']
-        if len(hist) > 1:
-            boxes.append(hist[-2])
-            colors.append('w')
-        plot_img_boxes(self.state.image, boxes, colors)
-        show_hog(get_crop(self.state.image, self.state.box))
+#     def show(self):
+#         gt = self.episode[0]
+#         hist = self.episode[1]
+#         boxes = [gt]
+#         boxes.append(hist[-1])
+#         colors = ['y', 'r']
+#         if len(hist) > 1:
+#             boxes.append(hist[-2])
+#             colors.append('w')
+#         plot_img_boxes(self.state.image, boxes, colors)
+#         show_hog(get_crop(self.state.image, self.state.box))
         
 
 
@@ -192,7 +183,7 @@ def plot_img_boxes(img, boxes, colors=None):
     #plt.show()
 
 def show_hog(image):
-    resized = resize(image, (128,128))
+    resized = resize(image, IMAGE_SIZE)
     gray = color.rgb2gray(np.array(resized))
     fd, hog_image = feature.hog(gray, orientations = ORIENTATIONS,
                         pixels_per_cell = PIXELS_PER_CELL,

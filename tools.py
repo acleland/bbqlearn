@@ -164,6 +164,13 @@ def get_labels(minv, maxv):
             labels.append('pdw' + str(i) + chr(97 + j))
     return labels
         
+def get_imgfiles(minv, maxv):
+    labels = []
+    for i in range(minv, maxv+1):
+        labels.append('pdw' + str(i))
+    return labels
+
+
 
 
 

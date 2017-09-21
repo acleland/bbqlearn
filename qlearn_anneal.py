@@ -130,14 +130,6 @@ def print_stats(vector):
     print('mean', np.mean(vector))
 
 
-def bar_plot(v, xlabel=None, ylabel=None):
-    x = np.arange(len(v))
-    plt.bar(x, v)
-    if xlabel:
-        plt.xlabel(xlabel)
-    if ylabel:
-        plt.ylabel(ylabel)
-    plt.show()
 
 def print_round(name, v,decimal=3):
     print(name, np.around(v,decimal)) 
@@ -181,64 +173,72 @@ class Qlearn:
             epsilon = epsilon_func(epoch)
             epsilon_by_epoch.append(epsilon)
             print('Epoch', epoch, 'of', num_epochs)
-            for episode in range(1, len(train_list)+1):
-                if visual:
-                    print('Episode', episode, 'of', len(train_list))
-                train_ex = train_list[episode-1]
-                if visual:
-                    print(train_ex)
-                env.load(train_ex)
-                s_prime = None
-                for i in range(1, actions_per_episode+1):
-                    if visual:
-                        print('Action', i)
-                    # Get the state from the environment
-                    if s_prime is not None:
-                        s = s_prime
-                    else:
-                        s = env.get_state()
-                    # Get Q(s) vector
-                    Qs = perc.getQvector(s)
-                    # Select action according to epsilon greedy
-                    best_action = random_argmax(Qs)
-                    a = epsilon_choose(env.num_actions, best_action, epsilon)
-                    # Compute Q(s,a)
-                    Qsa = Qs[a]
-                    # Take action a to obtain s'
-                    s_prime, r = env.take_action(a)
-                    rewards_this_epoch.append(r)
-                    # Compute Q(s')
-                    Qs_prime = perc.getQvector(s_prime)
-                    Qs_prime_max = np.max(Qs_prime)
-                    y = sigmoid(r + discount_factor * Qs_prime_max)
-                    # Update weights
-                    if visual:
-                        old_weights = np.copy(perc.weights)
-                    perc.update_weights(y, Qsa, s, a, learning_rate)
-                    # Show relevant information
-                          
-                    if visual:
-                        print_round('Q(s)', Qs)
-                        print('a:', a, env.actions[a])
-                        print('Q(s,a)=', Qsa)
-                    
-                    if visual:
-                        env.show()
-                        print("\ns', r computed from action a")
-                        print("r", r)
-                        print_round("Q(s')", Qs_prime)
-                        print("max_a' Q(s'):", Qs_prime_max)
 
-                        print("\ny = sigmoid( r + " + str(discount_factor) + "*max_a' Q(s') )")
-                        print("y=", y)
-                        print("Error: y - Q(s,a)", y - Qsa)
-                        
-                        print('weights updated according to y - Q(s,a)')
-                        print('new weights stats')
-                        print_stats(perc.weights)
+            for imagefile in train_list:
+                if visual:
+                    print(imagefile)
+
+                img = load_image(imagefile)
+                gt, skews = get_gt_skews(imagefile)  # To be implemented. Returns ground truth and list of boxes.
+
+                for skew in skews:
+
+                    state = State(img, skew, history_length = HISTORY_LENGTH)
+                    s_prime = state.get_vector()
+                    for i in range(1, actions_per_episode+1):
                         if visual:
-                            show_weights(old_weights, perc.weights)
-                        print()
+                            print('Action', i)
+
+                        # Current state s
+                        s = s_prime
+
+                        # Get Q(s) vector
+                        Qs = perc.getQvector(s)
+
+                        # Select action according to epsilon greedy
+                        best_action = random_argmax(Qs)
+                        a = epsilon_choose(env.num_actions, best_action, epsilon)
+
+                        # Compute Q(s,a)
+                        Qsa = Qs[a]
+
+                        # Take action a to obtain s'
+                        s_prime, r = env.take_action(a)
+                        rewards_this_epoch.append(r)
+
+                        # Compute Q(s')
+                        Qs_prime = perc.getQvector(s_prime)
+                        Qs_prime_max = np.max(Qs_prime)
+                        y = sigmoid(r + discount_factor * Qs_prime_max)
+                        
+                        # Update weights
+                        if visual:
+                            old_weights = np.copy(perc.weights)
+                        perc.update_weights(y, Qsa, s, a, learning_rate)
+                        # Show relevant information
+                          
+                        if visual:
+                            print_round('Q(s)', Qs)
+                            print('a:', a, env.actions[a])
+                            print('Q(s,a)=', Qsa)
+                        
+                        if visual:
+                            env.show()
+                            print("\ns', r computed from action a")
+                            print("r", r)
+                            print_round("Q(s')", Qs_prime)
+                            print("max_a' Q(s'):", Qs_prime_max)
+
+                            print("\ny = sigmoid( r + " + str(discount_factor) + "*max_a' Q(s') )")
+                            print("y=", y)
+                            print("Error: y - Q(s,a)", y - Qsa)
+                            
+                            print('weights updated according to y - Q(s,a)')
+                            print('new weights stats')
+                            print_stats(perc.weights)
+                            if visual:
+                                show_weights(old_weights, perc.weights)
+                            print()
             avg_reward_by_epoch.append(np.mean(rewards_this_epoch))
             weights_by_epoch.append(np.copy(perc.weights))
             # Save Data every epoch
