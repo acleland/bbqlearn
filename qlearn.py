@@ -267,7 +267,7 @@ class Qlearn:
                         Qs_prime_max = np.max(Qs_prime)
                         
 
-                        if i = actions_per_episode:
+                        if i == actions_per_episode:
                             y = sigmoid(r)
                         else:
                             y = sigmoid(r + discount_factor * Qs_prime_max)
