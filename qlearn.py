@@ -334,6 +334,7 @@ class Qlearn:
                 save_array(epsilon_by_epoch, 'epsilon_by_epoch', save_path)
                 save_array(imp_rates, 'imp_rates_by_epoch', save_path)
                 save_array(avg_change_ious, 'avg_change_ious_by_epoch', save_path)
+                save_array(actions_by_epoch, 'actions_by_epoch', save_path)
 
                 tlistname = save_path + '/train_list.p'
                 os.makedirs(os.path.dirname(tlistname), exist_ok=True)
