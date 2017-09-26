@@ -21,7 +21,7 @@ import os
 HUMANS = "../Data/Humans/"
 DOGS = "../Data/Skews3/"
 
-IMAGE_PATH = "../Data/Train/"
+IMAGE_PATH = "../Data/PortlandStateDogWalkingImages/PrototypicalDogWalking/"
 OUTPUT_PATH = "../Output/"
 
 
