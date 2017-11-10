@@ -175,6 +175,14 @@ def save_array(array, name, folder):
 def show_state(img, gt, bb0, bb1):
     plot_img_boxes(img, [gt, bb0, bb1], ['y','r','w'])
 
+def get_image_dog_human(image_name):
+    img = load_image(IMAGE_PATH + image_name + '.jpg')
+    _, _, h_gt = parse_label(read_label(HUMANS + image_name + 'a.labl'))
+    _, _, d_gt = parse_label(read_label(DOGS + image_name + 'a.labl'))
+    dog = get_crop(img, d_gt)
+    human = get_crop(img, h_gt)
+    return img, dog, human, d_gt, h_gt
+
 # Q-learning algorithm
 class Qlearn:
     def __init__(self, env=None):

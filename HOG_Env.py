@@ -158,8 +158,9 @@ class State:
 
 # --------------------------------------------------------------------------------
 
-def plot_img_boxes(img, boxes, colors=None):
+def plot_img_boxes(img, boxes, colors=None, mode='centered'):
     fig,ax = plt.subplots(1)
+    ax.axis('off')
     ax.imshow(img)
     if colors is None:
         colors = ['r']*len(boxes)
@@ -167,22 +168,23 @@ def plot_img_boxes(img, boxes, colors=None):
     for box, col in zip(boxes, colors):
         rect = patches.Rectangle((box.x,box.y),box.width,box.height, linewidth=2,edgecolor=col,facecolor='none')
         ax.add_patch(rect)
-    box_lefts = [box.x for box in boxes]
-    box_tops = [box.y for box in boxes]
-    box_rights = [box.x + box.width for box in boxes]
-    box_bottoms = [box.y + box.height for box in boxes]
-    margin = 100
-    img_box = img.getbbox()
-    left_xlim = max(0, min(box_lefts) - margin)
-    right_xlim = min(img_box[2], max(box_rights) + margin)
-    top_ylim = max(0, min(box_tops) - margin)
-    bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
-    ax.set_xlim(left_xlim, right_xlim)
-    ax.set_ylim(bottom_ylim, top_ylim)
+    if mode == 'centered':
+        box_lefts = [box.x for box in boxes]
+        box_tops = [box.y for box in boxes]
+        box_rights = [box.x + box.width for box in boxes]
+        box_bottoms = [box.y + box.height for box in boxes]
+        margin = 100
+        img_box = img.getbbox()
+        left_xlim = max(0, min(box_lefts) - margin)
+        right_xlim = min(img_box[2], max(box_rights) + margin)
+        top_ylim = max(0, min(box_tops) - margin)
+        bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
+        ax.set_xlim(left_xlim, right_xlim)
+        ax.set_ylim(bottom_ylim, top_ylim)
     return ax
     #plt.show()
 
-def show_hog(image):
+def show_hog(image, savename = ''):
     resized = resize(image, IMAGE_SIZE)
     gray = color.rgb2gray(np.array(resized))
     fd, hog_image = feature.hog(gray, orientations = ORIENTATIONS,
@@ -207,5 +209,8 @@ def show_hog(image):
     ax2.imshow(hog_image_rescaled, cmap=plt.cm.gray)
     ax2.set_title('Histogram of Oriented Gradients')
     ax1.set_adjustable('box-forced')
+    if savename != '':
+        plt.savefig(savename)
     plt.show()
+    
     

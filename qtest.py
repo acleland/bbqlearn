@@ -1,7 +1,6 @@
 #!/usr/local/bin/python3
-from qlearn_anneal import *
-from HOG_Env import *
-from tools import *
+from qlearn import *
+
 import sys
 
 ACTIONS_PER_EPISODE = 15
@@ -39,39 +38,17 @@ class Qtest:
             print("s' box", state.box)
         
 
-def test(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=TRAIN_PATH, printing=True):
+
+def test_get_ious_boxes(perceptron, test_label_files, 
+                        n=ACTIONS_PER_EPISODE, 
+                        img_path=IMAGE_PATH, 
+                        label_path = DOGS):
+    
+
+    # Set up tester
     tester = Qtest(perceptron)
-    initial_ious = []
-    adjusted_ious = []
-    changes = []
 
-    for testfile in test_label_files:
-        imgf, bb, gt = parse_label(read_label(img_path + testfile + '.labl'))
-        initial_iou = bb.iou(gt)
-        initial_ious.append(initial_iou)
-        image = load_image(img_path + imgf + '.jpg')
-        print('Image file', imgf)
-        print('Initial Box', bb, 'Ground truth', gt, 'IOU', initial_iou)
-        print('Getting new box...')
-        adjusted_box = tester.adjust_box(image, bb, n, printing=printiing)
-        new_iou = adjusted_box.iou(gt)
-        adjusted_ious.append(new_iou)
-        change = new_iou - initial_iou
-        changes.append(change)
-        #percent_change = (new_iou - initial_iou)/initial_iou
-        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Change', change)
-
-    avg_change = np.mean(changes)
-    print('Average change in IOU:', avg_change)
-    print('Average initial IOU', np.mean(initial_ious))
-    print('Average final IOU', np.mean(adjusted_ious))
-
-    return initial_ious, adjusted_ious
-
-
-
-def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img_path=IMAGE_PATH, label_path = LABEL_PATH):
-    tester = Qtest(perceptron)
+    # Set up data collectors
     iou_data = []
     changes = []
     initial_ious = []
@@ -81,29 +58,32 @@ def test_get_ious_boxes(perceptron, test_label_files, n=ACTIONS_PER_EPISODE, img
     count = 0
 
     for testfile in test_label_files:
-        count +=1
-        print(count, '/', len(test_label_files))
-        imgf, bb, gt = parse_label(read_label(label_path + testfile + '.labl'))
-        original_box = bb.toVector()
-        ground_truth = gt.toVector()
-        initial_iou = bb.iou(gt)
-        image = load_image(img_path + imgf + '.jpg')
-        #print('Image file', imgf)
-        #print('Initial Box', bb, 'Ground truth', gt, 'IOU', initial_iou)
-        #print('Getting new box...')
-        adjusted_box = tester.adjust_box(image, bb, n, printing=False)
-        final_box = adjusted_box.toVector()
-        new_iou = adjusted_box.iou(gt)
-        change = new_iou - initial_iou
-        if initial_iou == 0:
-            print('zero init iou found in', testfile)
-        #percent_change = (new_iou - initial_iou)/initial_iou
-        iou_data.append((testfile, initial_iou, new_iou, change))
-        changes.append(change)
-        initial_ious.append(initial_iou)
-        adjusted_ious.append(new_iou)
-        box_data.append((testfile, ground_truth, original_box, final_box))
-        print('New box', adjusted_box, 'Adjusted IOU', new_iou, 'Change', change)
+        image = load_image(img_path + testfile + '.jpg')
+        gt, skews = get_gt_skews(testfile, label_path) 
+        count += 1 
+        print('Image', count, '/', len(test_label_files))
+        episode = 0
+
+        for skew in skews:
+            episode += 1
+
+            original_box = skew.toVector()
+            ground_truth = gt.toVector()
+            initial_iou = skew.iou(gt)
+            
+            adjusted_box = tester.adjust_box(image, skew, n, printing=False)
+            final_box = adjusted_box.toVector()
+            new_iou = adjusted_box.iou(gt)
+            change = new_iou - initial_iou
+            if initial_iou == 0:
+                print('zero init iou found in', testfile)
+            
+            iou_data.append((testfile, initial_iou, new_iou, change))
+            changes.append(change)
+            initial_ious.append(initial_iou)
+            adjusted_ious.append(new_iou)
+            box_data.append((testfile, ground_truth, original_box, final_box))
+            print('Episode', episode, 'Old IOU', initial_iou, 'New IOU', new_iou, 'Change', change)
 
     avg_change = np.mean(changes)
     print('Average change in IOU:', avg_change)
@@ -121,6 +101,41 @@ def iou_fig(fig_save_name, init_ious, final_ious):
     plt.savefig(fig_save_name, bbox_inches='tight')
     plt.close()
 
+
+def success_rate(iou_data):
+    count = 0
+    for d in iou_data:
+        if d[3] > 0:
+            count += 1
+    return count/len(iou_data)
+
+def get_learning_curve(wbe, epochs, subject):
+    test_list = get_imgfiles(401,500)
+    if subject.upper() in ['DOGS', 'DOG', 'D']:
+        LABEL_SUBJECT = DOGS
+    else:
+        LABEL_SUBJECT = HUMANS
+
+    suc_rates = []
+    for epoch in epochs:
+        perc = Perceptron.from_weights(wbe[epoch])
+        test_iou_data, test_box_data = test_get_ious_boxes(perc, 
+                                                    test_list,
+                                                    n=ACTIONS_PER_EPISODE,
+                                                    img_path = IMAGE_PATH,
+                                                    label_path = LABEL_SUBJECT)
+        suc_rates.append(success_rate(test_iou_data))
+
+    return suc_rates
+
+def lc_fig(fig_save_name, epochs, suc_rates):
+    plt.plot(epochs, suc_rates)
+    plt.xlabel('Epochs trained')
+    plt.ylabel('Success Rate')
+    plt.savefig(fig_save_name, bbox_inches='tight')
+    plt.close()
+
+
   
 
 # --------------------------------------------------------------------------------
@@ -128,24 +143,29 @@ def iou_fig(fig_save_name, init_ious, final_ious):
 
 
 if __name__ == '__main__':
-    filepath = sys.argv[1]
+    subject = sys.argv[1]
+    filepath = sys.argv[2]
+
+    if subject.upper() in ['DOGS', 'DOG', 'D']:
+        LABEL_SUBJECT = DOGS
+    else:
+        LABEL_SUBJECT = HUMANS
+
     perc = Perceptron.load(filepath + 'perceptron.npy')
     train_list = pickle.load(open(filepath + 'train_list.p','rb'))
-    validation_list = get_labels(391,400)
+    test_list = get_imgfiles(401,500)
 
-    train_iou_data, train_box_data = test_get_ious_boxes(perc, train_list)
-    train_init_ious = train_iou_data['init_iou']
-    train_final_ious = train_iou_data['final_iou']
-    iou_fig(filepath + 'train_iou_fig.pdf', train_init_ious, train_final_ious)
-    np.save(filepath + 'train_iou_data.npy', train_iou_data)
-    pickle.dump(train_box_data, open(filepath + 'train_boxdata.p', 'wb'))
 
-    validation_iou_data, validation_box_data = test_get_ious_boxes(perc, validation_list)
-    validation_init_ious = validation_iou_data['init_iou']
-    validation_final_ious = validation_iou_data['final_iou']
-    iou_fig(filepath + 'validation_iou_fig.pdf', validation_init_ious, validation_final_ious)
-    np.save(filepath + 'validation_iou_data.npy', validation_iou_data)
-    pickle.dump(validation_box_data, open(filepath + 'validation_boxdata.p', 'wb'))
+    test_iou_data, test_box_data = test_get_ious_boxes(perc, 
+                                                    test_list,
+                                                    n=ACTIONS_PER_EPISODE,
+                                                    img_path = IMAGE_PATH,
+                                                    label_path = LABEL_SUBJECT)
+    test_init_ious = test_iou_data['init_iou']
+    test_final_ious = test_iou_data['final_iou']
+    iou_fig(filepath + 'test_iou_fig.pdf', test_init_ious, test_final_ious)
+    np.save(filepath + 'test_iou_data.npy', test_iou_data)
+    pickle.dump(test_box_data, open(filepath + 'test_boxdata.p', 'wb'))
 
     
     
