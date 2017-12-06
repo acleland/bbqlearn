@@ -8,6 +8,7 @@ from PIL import Image
 from collections import namedtuple
 #from keras.preprocessing import image
 from scipy.special import expit
+from skimage import io, transform
 
 TRAIN_PATH = "../Data/Train/"
 OUTPUT_PATH = "../Output/"
@@ -36,8 +37,6 @@ def random_argmax(vector):
     v = np.asarray(vector)
     return np.random.choice(np.flatnonzero(v == v.max()))
 
-
-ImageData = namedtuple('ImageData', 'width, height dogs people')
 
 # --------------------------------------------------------------------------------
 
@@ -109,10 +108,11 @@ class Box:
 # File scripting and image functions
 
 def get_crop(img, box):
-    return img.crop(box.toVector2())
+    crop_vector = box.toVector2()
+    return np.array(Image.fromarray(img).crop(crop_vector))
 
 def resize(img, size):
-    return img.resize(size)
+    return transform.resize(img, size, mode = 'constant')
 
 def get_cropped_resized(pil_image, cropbox):
     return pil_image.crop(tuple(cropbox.toVector2())).resize((224,224))
@@ -136,8 +136,15 @@ def parse_label(label):
     return image_filename, bb, gt
 
 def load_image(filepath):
-    #return image.load_img(filepath)
-    return Image.open(filepath)
+    #return io.imread(filepath, as_grey=True)
+    pil_image = Image.open(filepath)
+    return np.array(pil_image)
+
+def show_image(img):
+    plt.imshow(img, cmap='gray')
+    plt.show()
+    plt.close()
+
 def get_train_labels(path):
     fnames = []
     for labelFile in glob.glob(path + '*.labl'):

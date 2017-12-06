@@ -21,11 +21,10 @@ import os
 HUMANS = "../Data/Humans/"
 DOGS = "../Data/Skews3/"
 
-IMAGE_PATH = "../Data/PortlandStateDogWalkingImages/PrototypicalDogWalking/"
-OUTPUT_PATH = "../Output/"
+IMAGE_PATH = "../Data/Cropped/"
+SAVE_PATH = "../Output/dumbtest/"
 
-
-NUM_EPOCHS = 3
+NUM_EPOCHS = 1
 ACTIONS_PER_EPISODE = 2
 VISUAL = True
 
@@ -42,16 +41,6 @@ def halfsy(epoch):
 
 # Utility Functions
 
-def sqdist(p1, p2):
-    diff = p2 - p1
-    return np.dot(diff, diff)
-def dist(p1, p2):
-    return np.sqrt(sqdist(p1,p2))
-def sse(coords, ground_truth_coords):
-    sumv = 0
-    for i in range(len(coords)):
-        sumv += sqdist(coords[i], ground_truth_coords[i])
-    return sumv
 def sigmoid(z):
     return expit(z)
 def onehot(i, n):
@@ -173,15 +162,47 @@ def save_array(array, name, folder):
 
 
 def show_state(img, gt, bb0, bb1):
-    plot_img_boxes(img, [gt, bb0, bb1], ['y','r','w'])
+    plot_img_boxes(img, [gt, bb0, bb1], ['y','r','w'], slimming=False)
 
-def get_image_dog_human(image_name):
-    img = load_image(IMAGE_PATH + image_name + '.jpg')
-    _, _, h_gt = parse_label(read_label(HUMANS + image_name + 'a.labl'))
-    _, _, d_gt = parse_label(read_label(DOGS + image_name + 'a.labl'))
-    dog = get_crop(img, d_gt)
-    human = get_crop(img, h_gt)
-    return img, dog, human, d_gt, h_gt
+# --------------------------------------------------------------------------------
+
+def box_in_bounds(img_shape, box):
+    left, top, right, bottom = box.toVector2()
+    width = img_shape[1]
+    height = img_shape[0]
+    if left < 0 or right > width:
+        return False
+    elif top < 0 or bottom > height:
+        return False
+    return True
+
+
+def load_images(image_path, image_list):
+    images = {}
+    for image_label in image_list:
+        images[image_label] = load_image(image_path + image_label + '.jpg')
+    return images
+
+
+def create_skew(box, image_shape, min_iou):
+    skewed = []
+    data = box.toVector()
+    FRAC = .25
+    sigma_x = FRAC * box.width
+    sigma_y = FRAC * box.height
+    sigma = (sigma_x, sigma_y, sigma_x, sigma_y)
+    for i in range(4):
+            skew = int(np.random.normal(0, sigma[i]))
+            skewed.append(max(data[i] + skew, 0))
+    skewed = Box.fromVector(skewed).round()
+    if box_in_bounds(image_shape, skewed) and skewed.iou(box) > min_iou:
+        return skewed
+    else: 
+        return create_skew(box, image_shape, min_iou)
+
+
+# --------------------------------------------------------------------------------
+
 
 # Q-learning algorithm
 class Qlearn:
@@ -197,13 +218,27 @@ class Qlearn:
                                         epsilon_func = EPS_CONST, 
                                         visual=VISUAL):
         
-        LABEL_PATH = DOGS
         if subject.upper() == 'HUMANS':
-            LABEL_PATH = HUMANS
-    
-        np.random.shuffle(train_list)
+            label_data = pickle.load(open('../Data/Cropped/human_labels.p','rb'))
+            IMAGE_PATH = '../Data/Cropped/Humans/'
+        elif subject.upper() == 'DOGS':
+            label_data = pickle.load(open('../Data/Cropped/dog_labels.p','rb'))
+            IMAGE_PATH = '../Data/Cropped/Dogs/'
         
-        #env = self.env
+        # Create example list for training
+        exlist = []
+        for image_label in train_list:
+            gt, skews = label_data[image_label]
+            for skew in skews:
+                exlist.append((image_label, gt, skew))
+
+        # Load images into memory
+        images = {}
+        for image_label in train_list:
+            images[image_label] = load_image(IMAGE_PATH + image_label + '.jpg')
+
+        np.random.shuffle(exlist)
+        
         perc = self.perc
         
         # init reward data
@@ -227,103 +262,95 @@ class Qlearn:
             episode_count = 0
             imp_count = 0
             iou_changes = []
-            action_count = [0]*NUM_ACTIONS
+            action_count = [0 for _ in range(NUM_ACTIONS)]
             
             print('Epoch', epoch, 'of', num_epochs)
 
-            for imagefile in train_list:
+            for example in exlist: 
                 if visual:
-                    print(imagefile)
+                    print(example)
+                
+                image_label, gt, skew = example  
+                img = images[image_label]
 
-                img = load_image(IMAGE_PATH + imagefile +'.jpg')
-                gt, skews = get_gt_skews(imagefile, LABEL_PATH)  
+                state = State(img, skew, history_length = HISTORY_LENGTH)
+                s_prime = state.get_vector()
+                init_iou = skew.iou(gt)
 
-                for skew in skews:
+                for i in range(1, actions_per_episode+1):
+                    if visual:
+                        print('Action', i)
 
-                    state = State(img, skew, history_length = HISTORY_LENGTH)
+                    # Current state s
+                    s = s_prime
+
+                    # Get Q(s) vector
+                    Qs = perc.getQvector(s)
+
+                    # Select action according to epsilon greedy
+                    best_action = random_argmax(Qs)
+                    a = epsilon_choose(NUM_ACTIONS, best_action, epsilon)
+                    action_count[a] += 1
+
+                    # Compute Q(s,a)
+                    Qsa = Qs[a]
+
+                    # Take action a to obtain s'
+                    iou = gt.iou(state.box)
+                    state.take_action(a)
                     s_prime = state.get_vector()
-                    init_iou = skew.iou(gt)
+                    new_iou = gt.iou(state.box)
+                    r = np.sign(new_iou-iou)
+                    rewards_this_epoch.append(r)
 
-                    for i in range(1, actions_per_episode+1):
-                        if visual:
-                            print('Action', i)
+                    # Compute Q(s')
+                    Qs_prime = perc.getQvector(s_prime)
+                    Qs_prime_max = np.max(Qs_prime)
+                    
+                    
+                    # Compute target y
+                    if i == actions_per_episode:
+                        y = sigmoid(r)
+                    else:
+                        y = sigmoid(r + discount_factor * Qs_prime_max)
+                    
+                    # Update weights
+                    if visual:
+                        old_weights = np.copy(perc.weights)
+                    perc.update_weights(y, Qsa, s, a, learning_rate)
 
-                        # Current state s
-                        s = s_prime
+                    if visual:
+                        # Show relevant information
+        
+                        print_round('Q(s)', Qs)
+                        print('a:', a, actions[a])
+                        print('Q(s,a)=', Qsa)
+                               
+                        #env.show()
+                        show_state(img, gt, skew, state.box)
+                        plt.show()
+                        plt.close()
 
-                        # Get Q(s) vector
-                        Qs = perc.getQvector(s)
+                        print("\ns', r computed from action a")
+                        print('old iou', init_iou)
+                        print('new iou', new_iou)
+                        print("reward", r)
+                        print_round("Q(s')", Qs_prime)
+                        print("max_a' Q(s'):", Qs_prime_max)
 
-                        # Select action according to epsilon greedy
-                        best_action = random_argmax(Qs)
-                        a = epsilon_choose(NUM_ACTIONS, best_action, epsilon)
-                        action_count[a] += 1
-
-                        # Compute Q(s,a)
-                        Qsa = Qs[a]
-
-                        # Take action a to obtain s'
-                        iou = gt.iou(state.box)
-                        state.take_action(a)
-                        s_prime = state.get_vector()
-                        new_iou = gt.iou(state.box)
-                        r = np.sign(new_iou-iou)
-                        rewards_this_epoch.append(r)
-
-                        # Compute Q(s')
-                        Qs_prime = perc.getQvector(s_prime)
-                        Qs_prime_max = np.max(Qs_prime)
+                        print("\ny = sigmoid( r + " + str(discount_factor) + "*max_a' Q(s') )")
+                        print("y=", y)
+                        print("Error: y - Q(s,a)", y - Qsa)
                         
+                        print('weights updated according to dw =', str(learning_rate), '* (y - Q(s,a))*s')
+                        print()
 
-                        if i == actions_per_episode:
-                            y = sigmoid(r)
-                        else:
-                            y = sigmoid(r + discount_factor * Qs_prime_max)
-                        
-                        # Update weights
-                        if visual:
-                            old_weights = np.copy(perc.weights)
-                        perc.update_weights(y, Qsa, s, a, learning_rate)
-
-                        if visual:
-                            # Show relevant information
-            
-                            print_round('Q(s)', Qs)
-                            print('a:', a, actions[a])
-                            print('Q(s,a)=', Qsa)
-                                   
-                            #env.show()
-                            show_state(img, gt, skew, state.box)
-                            plt.show()
-
-                            print("\ns', r computed from action a")
-                            print('old iou', init_iou)
-                            print('new iou', new_iou)
-                            print("reward", r)
-                            print_round("Q(s')", Qs_prime)
-                            print("max_a' Q(s'):", Qs_prime_max)
-
-                            print("\ny = sigmoid( r + " + str(discount_factor) + "*max_a' Q(s') )")
-                            print("y=", y)
-                            print("Error: y - Q(s,a)", y - Qsa)
-                            
-                            print('weights updated according to dw =', str(learning_rate), '* (y - Q(s,a))*s')
-                            # x = np.concatenate(([1],s))
-                            # delta_w = learning_rate*(y - Qsa) * x
-                            # print('old weights for a='+str(a)+':', old_weights[a])
-                            # print('delta_w =', delta_w)
-                            # print('new weights:', perc.weights[a])
-                            #print('new weights stats')
-                            #print_stats(perc.weights)   
-                            # show_weights(old_weights, perc.weights)
-                            print()
-
-                    episode_count += 1
-                    new_iou = state.box.iou(gt)
-                    iou_change = new_iou - init_iou
-                    iou_changes.append(iou_change)
-                    if iou_change > 0:
-                        imp_count += 1
+                episode_count += 1
+                new_iou = state.box.iou(gt)
+                iou_change = new_iou - init_iou
+                iou_changes.append(iou_change)
+                if iou_change > 0:
+                    imp_count += 1
 
 
             # Record various epoch data 
@@ -349,24 +376,12 @@ class Qlearn:
                 pickle.dump(train_list, open(tlistname, 'wb'))
 
         print('Training complete. Saving to ' + save_path)
-        # Save data and charts from run
-    
-        # if visual:
-        #     os.makedirs(os.path.dirname(rfigname), exist_ok=True)
-        #     plt.figure(1)
-        #     x = np.arange(1,num_epochs+1)
-        #     y = np.asarray(avg_reward_by_epoch)
-        #     plt.plot(x,y)
-        #     plt.xlabel('Epoch')
-        #     plt.ylabel('Average Reward')
-        #     plt.savefig(rfigname, bbox_inches='tight')
-        #     plt.show()
 
 
 
 # --------------------------------------------------------------------------------
 if __name__ == '__main__':
-    pass
-    #Qlearn().run(SAVE_FILE)
+    tlist = get_imgfiles(1,2)
+    Qlearn().run(SAVE_PATH, tlist, subject='dogs', visual=True)
 
     

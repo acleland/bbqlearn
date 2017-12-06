@@ -40,8 +40,8 @@ PRINTING = False
 # --------------------------------------------------------------------------------
 def hog(img, visual):
     resized = resize(img, IMAGE_SIZE)
-    gray = color.rgb2gray(np.array(resized))
-    return feature.hog(gray, orientations = ORIENTATIONS,
+    #gray = color.rgb2gray(np.array(resized))
+    return feature.hog(resized, orientations = ORIENTATIONS,
                         pixels_per_cell = PIXELS_PER_CELL,
                         cells_per_block = CELLS_PER_BLOCK,
                         feature_vector = True,
@@ -80,7 +80,7 @@ class State:
         return np.concatenate((features, np.concatenate(self.history)))
 
     def get_skew(self):
-        return self.image.crop(self.box.toVector2())
+        return get_crop(self.image, self.box)
 
     # Actions: (Don't call these explicitly, otherwise, state history  and features 
     #           won't update correctly. Instead use state.take_action(action_number).)
@@ -158,12 +158,12 @@ class State:
 
 # --------------------------------------------------------------------------------
 
-def plot_img_boxes(img, boxes, colors=None, mode='centered'):
+def plot_img_boxes(img, boxes, colors=None, mode='centered', slimming=True):
     fig,ax = plt.subplots(1)
     ax.axis('off')
-    ax.imshow(img)
+    ax.imshow(img,cmap='gray')
     if colors is None:
-        colors = ['r']*len(boxes)
+        colors = ['w']*len(boxes)
    
     for box, col in zip(boxes, colors):
         rect = patches.Rectangle((box.x,box.y),box.width,box.height, linewidth=2,edgecolor=col,facecolor='none')
@@ -173,14 +173,15 @@ def plot_img_boxes(img, boxes, colors=None, mode='centered'):
         box_tops = [box.y for box in boxes]
         box_rights = [box.x + box.width for box in boxes]
         box_bottoms = [box.y + box.height for box in boxes]
-        margin = 100
-        img_box = img.getbbox()
-        left_xlim = max(0, min(box_lefts) - margin)
-        right_xlim = min(img_box[2], max(box_rights) + margin)
-        top_ylim = max(0, min(box_tops) - margin)
-        bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
-        ax.set_xlim(left_xlim, right_xlim)
-        ax.set_ylim(bottom_ylim, top_ylim)
+        if slimming:
+            margin = 100
+            img_box = (0,0, img.shape[0], img.shape[1]) 
+            left_xlim = max(0, min(box_lefts) - margin)
+            right_xlim = min(img_box[2], max(box_rights) + margin)
+            top_ylim = max(0, min(box_tops) - margin)
+            bottom_ylim = min(img_box[3], max(box_bottoms) + margin)
+            ax.set_xlim(left_xlim, right_xlim)
+            ax.set_ylim(bottom_ylim, top_ylim)
     return ax
     #plt.show()
 
