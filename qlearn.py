@@ -366,7 +366,19 @@ class Qlearn:
 
 # --------------------------------------------------------------------------------
 if __name__ == '__main__':
-    pass
-    #Qlearn().run(SAVE_FILE)
+    t0 = time.time()
+    print(time.asctime())
+    tlist = get_imgfiles(1,100)
+    Qlearn().run(save_path='test_1', train_list=tlist, 
+                subject='dogs', 
+                num_epochs= 2, 
+                actions_per_episode=15,
+                learning_rate=0.2,
+                discount_factor=0.9,
+                epsilon_func = eps, 
+                visual=False)
+    dt = time.time() - t0
+    print(time.asctime())
+    print('run time', dt, 'secs')
 
     
