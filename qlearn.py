@@ -380,8 +380,23 @@ class Qlearn:
 
 
 # --------------------------------------------------------------------------------
+def eps(epoch):
+    return 0.5
+
 if __name__ == '__main__':
-    tlist = get_imgfiles(1,2)
-    Qlearn().run(SAVE_PATH, tlist, subject='dogs', visual=True)
+    t0 = time.time()
+    print(time.asctime())
+    tlist = get_imgfiles(1,100)
+    Qlearn().run(save_path='test_1', train_list=tlist, 
+                subject='dogs', 
+                num_epochs= 2, 
+                actions_per_episode=15,
+                learning_rate=0.2,
+                discount_factor=0.9,
+                epsilon_func = eps, 
+                visual=False)
+    dt = time.time() - t0
+    print(time.asctime())
+    print('run time', dt, 'secs')
 
     
