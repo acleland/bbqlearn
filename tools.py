@@ -109,10 +109,10 @@ class Box:
 
 def get_crop(img, box):
     crop_vector = box.toVector2()
-    return np.array(Image.fromarray(img).crop(crop_vector))
+    return (Image.fromarray(img).crop(crop_vector))
 
-def resize(img, size):
-    return transform.resize(img, size, mode = 'constant')
+def resize(pil_img, size):
+    return np.array(pil_img.resize(size))
 
 def get_cropped_resized(pil_image, cropbox):
     return pil_image.crop(tuple(cropbox.toVector2())).resize((224,224))

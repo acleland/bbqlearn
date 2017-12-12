@@ -38,8 +38,8 @@ PRINTING = False
 
 # HOG Stuff
 # --------------------------------------------------------------------------------
-def hog(img, visual):
-    resized = resize(img, IMAGE_SIZE)
+def hog(pil_img, visual):
+    resized = resize(pil_img, IMAGE_SIZE)
     #gray = color.rgb2gray(np.array(resized))
     return feature.hog(resized, orientations = ORIENTATIONS,
                         pixels_per_cell = PIXELS_PER_CELL,
