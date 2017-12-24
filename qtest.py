@@ -4,6 +4,8 @@ from qlearn import *
 import sys
 
 ACTIONS_PER_EPISODE = 15
+DOGS = '../Data/Cropped/Dogs/'
+HUMANS = '../Data/Cropped/Humans'
 
 
 # --------------------------------------------------------------------------------
@@ -41,9 +43,16 @@ class Qtest:
 
 def test_get_ious_boxes(perceptron, test_label_files, 
                         n=ACTIONS_PER_EPISODE, 
-                        img_path=IMAGE_PATH, 
-                        label_path = DOGS):
+                        subject = 'DOGS'):
     
+    if subject.upper() == 'DOGS':
+        label_path = '../Data/Cropped/dog_labels.p'
+        img_path = '../Data/Cropped/Dogs/'
+    else:
+        label_path = '../Data/Cropped/human_labels.p'
+        img_path = '../Data/Cropped/Humans/'
+
+    labels = pickle.load(open(label_path, 'rb'))
 
     # Set up tester
     tester = Qtest(perceptron)
@@ -59,7 +68,7 @@ def test_get_ious_boxes(perceptron, test_label_files,
 
     for testfile in test_label_files:
         image = load_image(img_path + testfile + '.jpg')
-        gt, skews = get_gt_skews(testfile, label_path) 
+        gt, skews = labels[testfile]
         count += 1 
         print('Image', count, '/', len(test_label_files))
         episode = 0
@@ -112,9 +121,9 @@ def success_rate(iou_data):
 def get_learning_curve(wbe, epochs, subject):
     test_list = get_imgfiles(401,500)
     if subject.upper() in ['DOGS', 'DOG', 'D']:
-        LABEL_SUBJECT = DOGS
+        LABEL_SUBJECT = 'DOGS'
     else:
-        LABEL_SUBJECT = HUMANS
+        LABEL_SUBJECT = 'HUMANS'
 
     suc_rates = []
     for epoch in epochs:
@@ -123,7 +132,7 @@ def get_learning_curve(wbe, epochs, subject):
                                                     test_list,
                                                     n=ACTIONS_PER_EPISODE,
                                                     img_path = IMAGE_PATH,
-                                                    label_path = LABEL_SUBJECT)
+                                                    subject = LABEL_SUBJECT)
         suc_rates.append(success_rate(test_iou_data))
 
     return suc_rates
@@ -147,9 +156,9 @@ if __name__ == '__main__':
     filepath = sys.argv[2]
 
     if subject.upper() in ['DOGS', 'DOG', 'D']:
-        LABEL_SUBJECT = DOGS
+        LABEL_SUBJECT = 'DOGS'
     else:
-        LABEL_SUBJECT = HUMANS
+        LABEL_SUBJECT = 'HUMANS'
 
     perc = Perceptron.load(filepath + 'perceptron.npy')
     train_list = pickle.load(open(filepath + 'train_list.p','rb'))
@@ -159,8 +168,7 @@ if __name__ == '__main__':
     test_iou_data, test_box_data = test_get_ious_boxes(perc, 
                                                     test_list,
                                                     n=ACTIONS_PER_EPISODE,
-                                                    img_path = IMAGE_PATH,
-                                                    label_path = LABEL_SUBJECT)
+                                                    subject = LABEL_SUBJECT)
     test_init_ious = test_iou_data['init_iou']
     test_final_ious = test_iou_data['final_iou']
     iou_fig(filepath + 'test_iou_fig.pdf', test_init_ious, test_final_ious)
